@@ -4,6 +4,8 @@ import { GameSession } from '../models/GameSession.js';
 import { GameAnswer } from '../models/GameAnswer.js';
 
 const rooms = new Map();
+const QUESTION_DURATION_MS = 30000;
+const SPEED_BONUS_PER_SECOND = 5; // puntos por segundo restante
 async function getRandomByDifficulty(difficulty){
   const count = await Question.count({ where: { difficulty } });
   if (!count) return null;
@@ -13,7 +15,7 @@ async function getRandomByDifficulty(difficulty){
 
 function getRoom(roomId){
   if (!rooms.has(roomId)) {
-    rooms.set(roomId, { players: new Map(), difficulty: 1, current: null, timer: null, started: false, sessionId: null });
+    rooms.set(roomId, { players: new Map(), difficulty: 1, current: null, timer: null, started: false, sessionId: null, questionStartAt: null });
   }
   return rooms.get(roomId);
 }
@@ -25,11 +27,14 @@ async function askNext(io, roomId){
   if (!q) return finish(io, roomId);
   room.current = { id: q.id, correctIndex: q.correctIndex, text: q.text, options: q.options, explanation: q.explanation, verseHint: q.verseHint };
   // limpiar respuestas
-  room.players.forEach(p => { p.answered = null; });
-  io.to(roomId).emit('question', { id: q.id, text: q.text, options: q.options, difficulty: room.difficulty });
+  room.players.forEach(p => { p.answered = null; p.answerTimeMs = null; });
+  // programar tiempo y enviar deadline a clientes
+  room.questionStartAt = Date.now();
+  const deadline = room.questionStartAt + QUESTION_DURATION_MS;
+  io.to(roomId).emit('question', { id: q.id, text: q.text, options: q.options, difficulty: room.difficulty, durationMs: QUESTION_DURATION_MS, deadline });
   // timer 30s
   clearTimeout(room.timer);
-  room.timer = setTimeout(() => evaluate(io, roomId), 30000);
+  room.timer = setTimeout(() => evaluate(io, roomId), QUESTION_DURATION_MS);
 }
 
 function evaluate(io, roomId){
@@ -39,8 +44,16 @@ function evaluate(io, roomId){
   const results = [];
   room.players.forEach((p, sid) => {
     const ok = p.answered === correct;
-    if (ok) p.score = (p.score || 0) + 100 * room.difficulty;
-    results.push({ playerId: sid, name: p.name, ok, answer: p.answered, score: p.score || 0 });
+    let pointsAdded = 0;
+    if (ok) {
+      const base = 100 * room.difficulty;
+      const answeredAtMs = typeof p.answerTimeMs === 'number' ? p.answerTimeMs : QUESTION_DURATION_MS;
+      const remainingMs = Math.max(0, QUESTION_DURATION_MS - answeredAtMs);
+      const bonus = Math.floor(remainingMs / 1000) * SPEED_BONUS_PER_SECOND;
+      pointsAdded = base + bonus;
+      p.score = (p.score || 0) + pointsAdded;
+    }
+    results.push({ playerId: sid, name: p.name, ok, answer: p.answered, score: p.score || 0, pointsAdded });
   });
   io.to(roomId).emit('result', { correctIndex: correct, results, explanation: room.current.explanation, verseHint: room.current.verseHint });
 
@@ -56,7 +69,7 @@ function evaluate(io, roomId){
         playerName: r.name,
         correct: r.ok,
         answerIndex: r.answer ?? null,
-        pointsAwarded: r.ok ? 100 * currentDifficulty : 0,
+        pointsAwarded: r.pointsAdded || 0,
       }));
       GameAnswer.bulkCreate(bulk).catch(()=>{});
     }
@@ -112,6 +125,8 @@ export function attachGameSocket(io) {
       const p = room.players.get(socket.id);
       if (!room.current || !p || p.answered !== null) return;
       p.answered = index;
+      // registrar tiempo de respuesta relativo al inicio de la pregunta
+      p.answerTimeMs = Math.max(0, Date.now() - (room.questionStartAt || Date.now()));
       // evaluación temprana si todos respondieron
       const allAnswered = Array.from(room.players.values()).every(pp => pp.answered !== null);
       if (allAnswered) evaluate(io, roomId);
