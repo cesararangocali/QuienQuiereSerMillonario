@@ -7,4 +7,9 @@ import i18n from './plugins/i18n';
 
 import './styles.css';
 
-createApp(App).use(createPinia()).use(router).use(vuetify).use(i18n).mount('#app');
+createApp(App)
+	.use(createPinia())
+	.use(router)
+	.use(vuetify)
+	.use(i18n)
+	.mount('#app');

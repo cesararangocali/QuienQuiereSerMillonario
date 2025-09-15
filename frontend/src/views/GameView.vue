@@ -56,11 +56,12 @@
       </div>
 
       <div v-if="!started" class="my-2 d-flex ga-2 align-end">
-        <v-autocomplete
-          v-model="playerName" 
+        <v-combobox
+          v-model="playerName"
+          v-model:search="nameInput"
           :items="previousPlayers"
           :loading="loadingPlayers"
-          label="Tu nombre *" 
+          label="Tu nombre *"
           placeholder="Selecciona un jugador o escribe un nombre nuevo"
           :rules="nameRules"
           required
@@ -68,7 +69,9 @@
           prepend-inner-icon="mdi-account"
           clearable
           hide-no-data
-          
+          auto-select-first
+          return-object="false"
+          @update:modelValue="onPlayerPicked"
           class="flex-grow-1"
         >
           <template v-slot:prepend-item v-if="previousPlayers.length > 0">
@@ -108,8 +111,8 @@
               </v-list-item-title>
             </v-list-item>
           </template>
-        </v-autocomplete>
-        <v-btn color="indigo" size="large" @click="start" prepend-icon="mdi-play">Comenzar</v-btn>
+        </v-combobox>
+  <v-btn color="indigo" size="large" @click="start" prepend-icon="mdi-play">Comenzar</v-btn>
       </div>
       
       <!-- Información del jugador seleccionado o mensaje de nuevo jugador -->
@@ -263,6 +266,7 @@ const {
 } = useGameSounds();
 
 const playerName = ref('');
+const nameInput = ref('');
 const started = ref(false);
 const difficulty = ref(1);
 const question = ref(null);
@@ -477,6 +481,11 @@ async function loadQuestion() {
 
 async function start() {
   // Validar que el usuario haya ingresado su nombre
+  // Confirmar nombre desde el buffer de búsqueda si aplica
+  if (nameInput.value && nameInput.value.trim()) {
+    playerName.value = nameInput.value.trim();
+  }
+
   if (!playerName.value || playerName.value.trim() === '') {
     showDialog('warning', 'Nombre Requerido', 'Por favor ingresa tu nombre para comenzar el juego. Es obligatorio para guardar tu puntuación en el ranking.', null, 'Entendido');
     return;
@@ -518,6 +527,17 @@ async function start() {
     started.value = false;
     showDialog('error', 'Error al Iniciar', 'No se pudo iniciar el juego. Verifica tu conexión.', null, 'Reintentar');
   }
+}
+
+function onPlayerPicked(val) {
+  // Sincronizar el buffer de búsqueda para evitar divergencias
+  if (typeof val === 'string') {
+    nameInput.value = val
+  } else if (val && val.value) {
+    nameInput.value = val.value
+    playerName.value = val.value
+  }
+  updateSelectedPlayerInfo()
 }
 
 function onSelect(i) { selected.value = i; }
@@ -704,10 +724,8 @@ async function loadPreviousPlayers() {
       }
     });
     
-    // Convertir a arrays ordenados por puntaje
-    const sortedPlayers = Array.from(playersMap.values())
-      .sort((a, b) => b.points - a.points)
-      .slice(0, 20); // Limitar a 20 mejores jugadores
+    // Convertir a arrays ordenados por puntaje (sin limitar cantidad)
+    const sortedPlayers = Array.from(playersMap.values()).sort((a, b) => b.points - a.points);
     
     previousPlayers.value = sortedPlayers.map(p => p.name);
     playersData.value = sortedPlayers;
@@ -723,13 +741,13 @@ async function loadPreviousPlayers() {
 
 // Función para obtener información del jugador seleccionado
 function updateSelectedPlayerInfo() {
-  if (!playerName.value) {
+  if (!playerName.value || !playerName.value.trim()) {
     selectedPlayerInfo.value = null;
     return;
   }
-  
+  const typed = playerName.value.trim().toLowerCase();
   const playerData = playersData.value.find(
-    p => p.name.toLowerCase() === playerName.value.toLowerCase()
+    p => p.name.trim().toLowerCase() === typed
   );
   
   selectedPlayerInfo.value = playerData || null;
@@ -737,8 +755,10 @@ function updateSelectedPlayerInfo() {
 
 // Función para obtener información de un jugador por nombre
 function getPlayerInfo(name) {
+  const typed = name?.trim().toLowerCase();
+  if (!typed) return null;
   return playersData.value.find(
-    p => p.name.toLowerCase() === name.toLowerCase()
+    p => p.name?.trim().toLowerCase() === typed
   );
 }
 

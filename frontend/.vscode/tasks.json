@@ -1,0 +1,15 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Vite dev (single instance)",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"$ErrorActionPreference='Stop'; if(Get-Process -Name node -ErrorAction SilentlyContinue){ Get-Process -Name node | Where-Object { $_.MainWindowTitle -like '*vite*' -or $_.Path -like '*node.exe' } | Stop-Process -Force -ErrorAction SilentlyContinue }; npm run dev"
+			]
+		}
+	]
+}
