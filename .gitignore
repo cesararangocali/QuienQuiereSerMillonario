@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+
+# Env
+**/.env
+**/.env.local
+
+# SQLite
+**/*.sqlite
+**/*.sqlite-journal
+
+# Build artifacts
+**/dist
+**/build
