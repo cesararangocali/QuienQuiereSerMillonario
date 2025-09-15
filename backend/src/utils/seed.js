@@ -3,6 +3,8 @@ import { Question } from '../models/Question.js';
 import { Ranking } from '../models/Ranking.js';
 import { Prayer } from '../models/Prayer.js';
 import { User, createAdminIfNotExists } from '../models/User.js';
+import fs from 'fs';
+import path from 'path';
 
 const sampleQuestions = [
   {
@@ -167,7 +169,39 @@ export default async function seed() {
   await createAdminIfNotExists();
 
   const countQ = await Question.count();
-  if (countQ === 0) await Question.bulkCreate(sampleQuestions);
+  if (countQ === 0) {
+    // Intentar cargar desde data/questions_catolica.json si existe
+    try {
+      const dataPath = path.resolve(process.cwd(), 'data', 'questions_catolica.json');
+      if (fs.existsSync(dataPath)) {
+        const raw = fs.readFileSync(dataPath, 'utf-8');
+        const json = JSON.parse(raw);
+        const items = Array.isArray(json?.items) ? json.items : [];
+        if (items.length) {
+          await Question.bulkCreate(items.map(q => ({
+            text: q.text,
+            options: q.options,
+            correctIndex: Number(q.correctIndex),
+            difficulty: Number(q.difficulty),
+            category: q.category || 'General',
+            verseHint: q.verseHint || null,
+            explanation: q.explanation || null,
+            source: q.source || null,
+          })));
+          console.log(`Seed: importadas ${items.length} preguntas desde questions_catolica.json`);
+        } else {
+          await Question.bulkCreate(sampleQuestions);
+          console.log('Seed: usando preguntas de muestra');
+        }
+      } else {
+        await Question.bulkCreate(sampleQuestions);
+        console.log('Seed: archivo questions_catolica.json no encontrado, usando muestra');
+      }
+    } catch (e) {
+      console.error('Seed: error importando questions_catolica.json, usando muestra:', e.message);
+      await Question.bulkCreate(sampleQuestions);
+    }
+  }
 
   const countP = await Prayer.count();
   if (countP === 0) await Prayer.bulkCreate(samplePrayers);
