@@ -249,6 +249,36 @@ export function useGameSounds() {
   const toggleMute = () => { isMuted.value = !isMuted.value; applyVolumes() }
   const setMasterVolume = (v) => { masterVolume.value = Math.max(0, Math.min(1, Number(v))); applyVolumes() }
 
+  // Beep sintético (Web Audio) para contadores/indicadores
+  const beep = ({ freq = 880, ms = 120, volume = 0.6 } = {}) => {
+    if (!audioCtx.value) return
+    try {
+      const osc = audioCtx.value.createOscillator()
+      osc.type = 'sine'
+      const g = audioCtx.value.createGain()
+      const now = audioCtx.value.currentTime
+      const v = (isMuted.value ? 0 : volume * (defaultVolumes.correct || 0.7))
+      g.gain.setValueAtTime(0, now)
+      g.gain.linearRampToValueAtTime(v, now + 0.02)
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0001, v * 0.1), now + Math.max(0.04, ms / 1000))
+      osc.frequency.setValueAtTime(freq, now)
+      osc.connect(g)
+      g.connect(fxGain.value || masterGain.value)
+      osc.start(now)
+      osc.stop(now + Math.max(0.05, ms / 1000 + 0.02))
+      // Ducking leve del canal de música
+      if (musicGain.value) {
+        try {
+          const mg = musicGain.value.gain
+          mg.cancelScheduledValues(now)
+          mg.setValueAtTime(mg.value, now)
+          mg.linearRampToValueAtTime(0.75, now + 0.03)
+          mg.linearRampToValueAtTime(1, now + 0.18)
+        } catch {}
+      }
+    } catch {}
+  }
+
   return {
     enabled: audioContextReady,
     audioContextReady,
@@ -262,6 +292,7 @@ export function useGameSounds() {
     fadeOut,
     toggleMute,
     setMasterVolume,
+  beep,
     playIntro,
     playCorrect,
     playWrong,

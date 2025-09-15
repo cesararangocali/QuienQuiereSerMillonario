@@ -21,7 +21,7 @@
             <v-col cols="12" md="6">
               <div class="info-card qqss-ring">
                 <div class="info-title">¿Cómo se juega?</div>
-                <div class="info-text">Responde 15 preguntas con 3 comodines y tiempo limitado. ¡Llega a la última para convertirte en santo!</div>
+                <div class="info-text">Responde 15 preguntas con 3 comodines. Tiempo: niveles 1-5 sin límite, 6-10 con 1 minuto y 11-15 con 2 minutos por pregunta. ¡Llega a la última para convertirte en santo!</div>
               </div>
             </v-col>
             <v-col cols="12" md="6">

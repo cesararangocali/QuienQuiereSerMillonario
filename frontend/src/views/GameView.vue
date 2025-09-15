@@ -51,7 +51,14 @@
             <div class="stat-label">Puntos</div>
             <div class="stat-value text-yellow-accent-3">{{ points }}</div>
           </div>
-          <Timer ref="timerRef" :seconds="30" :paused="timerPaused" @timeout="onTimeout" @tick="onTimerTick" />
+          <Timer 
+            v-if="timePerLevel > 0"
+            ref="timerRef" 
+            :seconds="timePerLevel" 
+            :paused="timerPaused" 
+            @timeout="onTimeout" 
+            @tick="onTimerTick" 
+          />
         </div>
       </div>
 
@@ -227,6 +234,47 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Dialog de bienvenida antes de comenzar -->
+    <v-dialog v-model="welcomeDialog.show" max-width="520" persistent>
+      <v-card class="game-dialog qqss-ring text-center" elevation="20">
+        <div class="game-dialog-header">
+          <v-icon icon="mdi-hand-wave" color="light-blue" size="48" class="dialog-icon" />
+          <h2 class="dialog-title">{{ welcomeDialog.title }}</h2>
+        </div>
+        <v-card-text class="dialog-content">
+          <p class="dialog-message">{{ welcomeDialog.message }}</p>
+          <div class="text-medium-emphasis mt-2">Sonido de introducción reproduciéndose…</div>
+          <div class="text-left mt-4">
+            <div class="text-subtitle-2 mb-1">Reglas del juego</div>
+            <ul class="text-body-2 pl-6">
+              <li>Niveles 1 a 5: sin límite de tiempo.</li>
+              <li>Niveles 6 a 10: 1 minuto por pregunta.</li>
+              <li>Niveles 11 a 15: 2 minutos por pregunta.</li>
+            </ul>
+          </div>
+          <div v-if="welcomeDialog.ticking" class="mt-4">
+            <div class="countdown-circle">
+              <span class="countdown-number">{{ welcomeDialog.countdown || 0 }}</span>
+            </div>
+            <div class="text-caption mt-1">Comenzando en…</div>
+          </div>
+        </v-card-text>
+        <v-card-actions class="justify-center pa-4">
+          <v-btn
+            v-if="!welcomeDialog.ticking"
+            color="primary"
+            size="large"
+            variant="elevated"
+            class="qqss-ring"
+            prepend-icon="mdi-play"
+            @click="startAfterWelcome"
+          >
+            Iniciar
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
     
     <!-- Popup del ranking -->
     <RankingPopup v-model="showRanking" />
@@ -234,7 +282,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue';
+import { ref, reactive, onMounted, watch, computed } from 'vue';
 import axios from 'axios';
 import QuestionCard from '../components/QuestionCard.vue';
 import Timer from '../components/Timer.vue';
@@ -262,7 +310,9 @@ const {
   toggleMute,
   isMuted,
   masterVolume,
-  setMasterVolume
+  setMasterVolume,
+  beep,
+  stopAll
 } = useGameSounds();
 
 const playerName = ref('');
@@ -298,6 +348,11 @@ const animState = ref('');
 // Control del timer
 const timerRef = ref(null);
 const timerPaused = ref(false);
+const timePerLevel = computed(() => {
+  if (difficulty.value >= 11) return 120;
+  if (difficulty.value >= 6) return 60;
+  return 0; // sin tiempo para niveles 1-5
+});
 
 // Estado del dialog personalizado
 const dialog = reactive({
@@ -316,6 +371,15 @@ const gameEndDialog = reactive({
   title: '',
   message: '',
   points: 0
+});
+
+// Dialog de bienvenida antes de iniciar el juego
+const welcomeDialog = reactive({
+  show: false,
+  title: '',
+  message: '',
+  countdown: 0,
+  ticking: false,
 });
 
 function showDialog(type, title, message, dialogPoints = null, buttonText = 'Aceptar') {
@@ -443,8 +507,15 @@ async function loadQuestion() {
   try {
     const { data } = await axios.get(`/api/game/question/${difficulty.value}`);
     question.value = data;
-    options.value = data.options;
-    indexMap.value = data.options.map((_, i) => i);
+    // Barajar opciones para aleatorizar la posición de la respuesta correcta
+    const order = data.options.map((_, i) => i);
+    // Fisher–Yates shuffle
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [order[i], order[j]] = [order[j], order[i]];
+    }
+    options.value = order.map(i => data.options[i]);
+    indexMap.value = order; // mapa: índice visible -> índice original
     selected.value = null;
     
     // Sonido de nueva pregunta (solo si no es la primera)
@@ -452,10 +523,14 @@ async function loadQuestion() {
       playQuestion();
     }
     
-    // Reanudar el timer para la nueva pregunta
+    // Gestionar el temporizador según el nivel
     timerPaused.value = false;
-    if (timerRef.value) {
-      timerRef.value.start();
+    if (timePerLevel.value > 0) {
+      // Si hay límite de tiempo, iniciar/reiniciar el timer
+      if (timerRef.value) timerRef.value.start();
+    } else {
+      // Sin límite de tiempo: asegurar que el timer no esté corriendo
+      if (timerRef.value) timerRef.value.pause();
     }
   } catch (error) {
     console.error('Error loading question:', error);
@@ -503,25 +578,14 @@ async function start() {
   }
   
   try {
-    // Habilitar contexto de audio con la primera interacción del usuario
+    // Habilitar audio y mostrar diálogo de bienvenida con la intro
     await enableAudioContext();
-    
-    started.value = true;
-    
-    // Reproducir intro si el contexto de audio está habilitado
-    if (audioContextReady.value) {
-      playIntro();
-      // Esperar un poco para que se escuche el intro antes de continuar
-      setTimeout(async () => {
-        playQuestion(); // Sonido de inicio de pregunta
-        await loadQuestion();
-        startSuspense(); // Iniciar música de suspenso
-      }, 2000);
-    } else {
-      playQuestion(); // Sonido de inicio de pregunta
-      await loadQuestion();
-      startSuspense(); // Iniciar música de suspenso
-    }
+    playIntro();
+    welcomeDialog.title = `¡Bienvenido, ${playerName.value.trim()}!`;
+    welcomeDialog.message = 'Prepárate para poner a prueba tus conocimientos. Respira profundo, concéntrate y ¡vamos a por ello!';
+    welcomeDialog.countdown = 0;
+    welcomeDialog.ticking = false;
+    welcomeDialog.show = true;
   } catch (error) {
     console.error('Error starting game:', error);
     started.value = false;
@@ -622,8 +686,14 @@ async function fiftyFifty() {
     playLifeline();
     const { data } = await axios.post('/api/game/lifeline/50-50', { questionId: question.value.id });
     // Reconstruir opciones visibles y mapa de índices
-    options.value = data.keep.map(i => question.value.options[i]);
-    indexMap.value = data.keep;
+    const keep = [...data.keep];
+    // barajar el orden para que la correcta no quede siempre primera
+    for (let i = keep.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [keep[i], keep[j]] = [keep[j], keep[i]];
+    }
+    options.value = keep.map(i => question.value.options[i]);
+    indexMap.value = keep;
     used.fifty = true;
   } catch (error) {
     console.error('Error using 50-50 lifeline:', error);
@@ -647,8 +717,10 @@ async function callFriend() {
   try {
     playLifeline();
     const { data } = await axios.post('/api/game/lifeline/call', { questionId: question.value.id });
-    const suggested = data.suggestedIndex;
-    const letter = String.fromCharCode(65 + suggested);
+    const suggestedOriginal = data.suggestedIndex;
+    const suggestedVisible = indexMap.value.indexOf(suggestedOriginal);
+    const idx = suggestedVisible >= 0 ? suggestedVisible : 0;
+    const letter = String.fromCharCode(65 + idx);
     showDialog('info', 'Llamada a un Amigo', `Tu amigo ha analizado la pregunta y sugiere la opción ${letter}.`, null, 'Gracias');
     used.call = true;
   } catch (error) {
@@ -699,6 +771,48 @@ function onTimerTick(remainingSeconds) {
   // Solo reproducir sonido en los últimos 5 segundos para crear más tensión
   if (remainingSeconds <= 5) {
     playTimerTick();
+  }
+}
+
+// Confirmar inicio real del juego desde el diálogo de bienvenida
+async function startAfterWelcome() {
+  try {
+    // Iniciar cuenta regresiva 3-2-1 antes de comenzar
+    if (!welcomeDialog.ticking) {
+      welcomeDialog.ticking = true;
+      welcomeDialog.countdown = 3;
+      const tick = async () => {
+        if (welcomeDialog.countdown <= 0) {
+          // Beep de arranque, más pronunciado y fuerte
+          beep({ freq: 520, ms: 240, volume: 1.0 });
+          // Le damos un breve margen al beep antes de iniciar
+          setTimeout(async () => {
+            welcomeDialog.ticking = false;
+            welcomeDialog.show = false;
+            started.value = true;
+            stopAll();
+            playQuestion();
+            await loadQuestion();
+            startSuspense();
+          }, 150);
+          return;
+        }
+        // Beep por número (descendente). El "1" más largo/fuerte.
+        const base = 900; // Hz
+        const freq = base - (3 - welcomeDialog.countdown) * 120;
+        if (welcomeDialog.countdown === 1) {
+          beep({ freq, ms: 200, volume: 0.9 });
+        } else {
+          beep({ freq, ms: 120, volume: 0.6 });
+        }
+        welcomeDialog.countdown -= 1;
+        setTimeout(tick, 900);
+      };
+      setTimeout(tick, 900);
+    }
+  } catch (e) {
+    console.error('Error starting after welcome:', e);
+    showDialog('error', 'Error', 'No se pudo iniciar la partida.', null, 'Cerrar');
   }
 }
 
@@ -781,3 +895,29 @@ function handleFirstInteraction() {
   }
 }
 </script>
+
+<style scoped>
+.countdown-circle {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(103,80,164,0.35), rgba(103,80,164,0.08));
+  box-shadow: 0 0 24px rgba(103,80,164,0.35), inset 0 0 18px rgba(255,255,255,0.08);
+  animation: pulse 900ms ease-in-out infinite;
+}
+.countdown-number {
+  font-size: 42px;
+  font-weight: 800;
+  color: #c7b7ff;
+  text-shadow: 0 0 8px rgba(199,183,255,0.6);
+}
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+</style>
