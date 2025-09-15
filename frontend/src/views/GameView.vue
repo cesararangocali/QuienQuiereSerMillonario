@@ -1,7 +1,7 @@
 <template>
-  <v-container class="py-0" @click="handleFirstInteraction">
-    <!-- Header del juego -->
-    <section class="qqss-hero text-center mb-4">
+  <v-container class="py-0" :class="{ 'center-viewport': started }" @click="handleFirstInteraction">
+    <!-- Header del juego (oculto cuando el juego está en curso) -->
+    <section v-if="!started" class="qqss-hero text-center mb-4">
       <div class="qqss-title">¿Quién quiere ser santo?</div>
       <div class="qqss-sub">Demuestra tu conocimiento de la fe</div>
       <div class="mt-4 d-flex justify-center ga-4 flex-wrap">
@@ -31,18 +31,26 @@
     </section>
 
     <!-- Área del juego -->
-    <v-card class="pa-4 qqss-ring game-stage" elevation="12" style="width: 100%;">
-      <v-card-title class="d-flex align-center justify-center">
-        <div class="d-flex align-center ga-2">
-          <v-icon icon="mdi-gamepad-variant" size="large" color="accent" />
-          <span class="text-h4 font-weight-bold">JUEGO</span>
-        </div>
-      </v-card-title>
-      <v-divider class="my-4" />
-      
-      <!-- Estadísticas del juego - Solo mostrar cuando el juego haya comenzado -->
-      <div v-if="started" class="text-center mb-4">
-        <div class="d-flex justify-center ga-8 align-center">
+    <v-card class="pa-4 qqss-ring game-stage position-relative" elevation="12" style="width: 100%;">
+      <!-- Botón salir (X) flotante arriba-derecha -->
+      <v-tooltip v-if="started" text="Salir del juego" location="bottom">
+        <template #activator="{ props }">
+          <v-btn
+            v-bind="props"
+            class="position-absolute"
+            style="top: 8px; right: 8px; z-index: 5;"
+            icon
+            color="red"
+            variant="tonal"
+            @click="onRequestExit"
+          >
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </template>
+      </v-tooltip>
+      <v-card-title class="d-flex align-center justify-center position-relative">
+        <!-- Ronda y Puntos anclados al costado superior izquierdo -->
+        <div v-if="started" class="d-flex align-center ga-6 header-stats">
           <div class="game-stat">
             <div class="stat-label">Ronda</div>
             <div class="stat-value">{{ difficulty }}/15</div>
@@ -51,6 +59,18 @@
             <div class="stat-label">Puntos</div>
             <div class="stat-value text-yellow-accent-3">{{ points }}</div>
           </div>
+        </div>
+        <!-- Título centrado -->
+        <div class="d-flex align-center ga-3">
+          <v-icon icon="mdi-gamepad-variant" size="large" color="accent" />
+          <span class="text-h4 font-weight-bold">JUEGO</span>
+        </div>
+      </v-card-title>
+      <v-divider class="my-4" />
+      
+      <!-- Temporizador - visible cuando el juego haya comenzado -->
+      <div v-if="started" class="text-center mb-4">
+        <div class="d-flex justify-center ga-8 align-center">
           <Timer 
             v-if="timePerLevel > 0"
             ref="timerRef" 
@@ -77,7 +97,7 @@
           clearable
           hide-no-data
           auto-select-first
-          return-object="false"
+          :return-object="false"
           @update:modelValue="onPlayerPicked"
           class="flex-grow-1"
         >
@@ -182,6 +202,20 @@
       </div>
     </v-card>
 
+    <!-- Confirmación de salida -->
+    <v-dialog v-model="showExitConfirm" max-width="420" persistent>
+      <v-card>
+        <v-card-title class="text-h6">¿Salir del juego?</v-card-title>
+        <v-card-text>
+          Perderás el progreso de la partida actual. ¿Deseas salir?
+        </v-card-text>
+        <v-card-actions class="justify-end">
+          <v-btn variant="text" @click="cancelExit">Cancelar</v-btn>
+          <v-btn color="red" variant="elevated" @click="confirmExit" prepend-icon="mdi-exit-to-app">Salir</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Dialog personalizado -->
     <GameDialog 
       v-model:show="dialog.show"
@@ -283,6 +317,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, watch, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import axios from 'axios';
 import QuestionCard from '../components/QuestionCard.vue';
 import Timer from '../components/Timer.vue';
@@ -291,6 +326,7 @@ import MoneyLadder from '../components/MoneyLadder.vue';
 import GameDialog from '../components/GameDialog.vue';
 import RankingPopup from '../components/RankingPopup.vue';
 import { useGameSounds } from '../composables/useGameSounds.js';
+import { LADDER_VALUES } from '../constants/ladder.js';
 
 // Inicializar sistema de sonidos
 const {
@@ -314,6 +350,8 @@ const {
   beep,
   stopAll
 } = useGameSounds();
+
+const router = useRouter();
 
 const playerName = ref('');
 const nameInput = ref('');
@@ -381,6 +419,37 @@ const welcomeDialog = reactive({
   countdown: 0,
   ticking: false,
 });
+
+// Confirmación para salir del juego
+const showExitConfirm = ref(false);
+
+function onRequestExit() {
+  // Pausar timer y música de suspenso mientras decide
+  timerPaused.value = true;
+  if (timerRef.value) timerRef.value.pause();
+  stopSuspense();
+  showExitConfirm.value = true;
+}
+
+function cancelExit() {
+  showExitConfirm.value = false;
+  // Reanudar si hay tiempo en este nivel
+  timerPaused.value = false;
+  if (timerRef.value) {
+    if (timePerLevel.value > 0 && typeof timerRef.value.resume === 'function') {
+      timerRef.value.resume();
+    }
+  }
+  startSuspense();
+}
+
+function confirmExit() {
+  showExitConfirm.value = false;
+  // Detener sonidos y limpiar estado
+  stopAll();
+  resetGame();
+  router.push('/');
+}
 
 function showDialog(type, title, message, dialogPoints = null, buttonText = 'Aceptar') {
   dialog.type = type;
@@ -623,7 +692,9 @@ async function next() {
     const { data } = await axios.post('/api/game/answer', { questionId: question.value.id, index: pickedOriginal });
     
     if (data.correct) {
-      points.value += 100 * difficulty.value; // placeholder de puntuación
+  // Asignar puntos según la escalera visible
+  const stepIndex = Math.max(0, Math.min(LADDER_VALUES.length - 1, difficulty.value - 1));
+  points.value += LADDER_VALUES[stepIndex];
       animState.value = 'correct'; setTimeout(()=> animState.value = '', 800);
       playCorrect();
       
@@ -897,6 +968,20 @@ function handleFirstInteraction() {
 </script>
 
 <style scoped>
+.center-viewport {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.header-stats {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  padding-left: 8px;
+}
 .countdown-circle {
   width: 96px;
   height: 96px;

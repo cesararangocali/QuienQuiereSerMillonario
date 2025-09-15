@@ -1109,6 +1109,23 @@ const prayerHeaders = [
   { title: 'Acciones', key: 'actions', width: '120px', sortable: false }
 ];
 
+// Interceptor para manejar expiración o falta de autorización
+axios.interceptors.response.use(
+  (resp) => resp,
+  (error) => {
+    const status = error?.response?.status;
+    if (status === 401 || status === 403) {
+      // Limpiar sesión y pedir login nuevamente
+      localStorage.removeItem('adminToken');
+      delete axios.defaults.headers.common['Authorization'];
+      isAuthenticated.value = false;
+      user.value = null;
+      loginError.value = 'Sesión expirada o no autorizada. Inicia sesión de nuevo.';
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Verificar si ya está autenticado
 onMounted(() => {
   const token = localStorage.getItem('adminToken');
@@ -1193,6 +1210,7 @@ async function loadQuestions() {
     availableCategories.value = categories;
   } catch (error) {
     console.error('Error loading questions:', error);
+    // Si se recibió 401/403, el interceptor ya limpió la sesión
   } finally {
     loadingQuestions.value = false;
   }
