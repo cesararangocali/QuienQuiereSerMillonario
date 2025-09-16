@@ -338,13 +338,10 @@
       <v-card>
         <v-card-title>Bloquear Juego</v-card-title>
         <v-card-text>
-          <p>Ingresa el PIN para bloquear el juego:</p>
-          <v-text-field
-            v-model="gamePin"
-            label="PIN de Administrador"
-            type="password"
-            variant="outlined"
-          />
+          <p>Ingresa el PIN y un motivo (opcional) para bloquear el juego:</p>
+          <v-alert v-if="lockError" type="error" class="mb-3" closable @click:close="lockError = ''">{{ lockError }}</v-alert>
+          <v-text-field v-model="gamePin" label="PIN de Administrador" type="password" variant="outlined" />
+          <v-textarea v-model="lockReason" label="Motivo (opcional)" variant="outlined" rows="2" auto-grow placeholder="Ej.: Jornada masiva parroquial" />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -359,12 +356,8 @@
         <v-card-title>Desbloquear Juego</v-card-title>
         <v-card-text>
           <p>Ingresa el PIN para desbloquear el juego:</p>
-          <v-text-field
-            v-model="gamePin"
-            label="PIN de Administrador"
-            type="password"
-            variant="outlined"
-          />
+          <v-alert v-if="unlockError" type="error" class="mb-3" closable @click:close="unlockError = ''">{{ unlockError }}</v-alert>
+          <v-text-field v-model="gamePin" label="PIN de Administrador" type="password" variant="outlined" />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -986,11 +979,11 @@ import axios from 'axios';
 const router = useRouter();
 
 // Estados de autenticación
-const isAuthenticated = ref(false);
-const user = ref(null);
-const loading = ref(false);
-const loginError = ref('');
-const showPassword = ref(false);
+const isAuthenticated = ref(false)
+const user = ref(null)
+const loading = ref(false)
+const loginError = ref('')
+const showPassword = ref(false)
 
 // Credenciales de login
 const credentials = ref({
@@ -1033,7 +1026,10 @@ const showResetRankingDialog = ref(false);
 const showNewPrayerDialog = ref(false);
 const showEditPrayerDialog = ref(false);
 const showDeletePrayerDialog = ref(false);
-const gamePin = ref('');
+const gamePin = ref('')
+const lockReason = ref('')
+const lockError = ref('')
+const unlockError = ref('')
 
 // Nueva pregunta
 const creatingQuestion = ref(false);
@@ -1178,8 +1174,9 @@ async function loadAdminData() {
   await Promise.all([
     loadRanking(),
     loadQuestions(),
-    loadPrayers()
-  ]);
+    loadPrayers(),
+    loadGameStatus(),
+  ])
 }
 
 async function loadRanking() {
@@ -1228,6 +1225,16 @@ async function loadPrayers() {
   }
 }
 
+async function loadGameStatus() {
+  try {
+    const token = localStorage.getItem('adminToken');
+    const resp = await axios.get('/api/admin/lock/status', token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
+    gameStatus.value = { locked: !!resp.data?.locked, ...resp.data }
+  } catch (e) {
+    console.error('Error loading game status:', e)
+  }
+}
+
 // Funciones de gestión
 async function confirmResetRanking() {
   loadingReset.value = true;
@@ -1245,23 +1252,32 @@ async function confirmResetRanking() {
 
 async function lockGame() {
   try {
-    await axios.post('/api/admin/lock', { pin: gamePin.value });
-    gameStatus.value.locked = true;
-    showLockDialog.value = false;
-    gamePin.value = '';
+    const token = localStorage.getItem('adminToken');
+    lockError.value = ''
+    await axios.post('/api/admin/lock', { pin: gamePin.value, reason: lockReason.value }, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined)
+    gameStatus.value.locked = true
+    showLockDialog.value = false
+    gamePin.value = ''
+    lockReason.value = ''
+    await loadGameStatus()
   } catch (error) {
-    console.error('Error locking game:', error);
+    console.error('Error locking game:', error)
+    lockError.value = error?.response?.data?.error || 'No autorizado o PIN inválido'
   }
 }
 
 async function unlockGame() {
   try {
-    await axios.post('/api/admin/unlock', { pin: gamePin.value });
-    gameStatus.value.locked = false;
-    showUnlockDialog.value = false;
-    gamePin.value = '';
+    const token = localStorage.getItem('adminToken');
+    unlockError.value = ''
+    await axios.post('/api/admin/unlock', { pin: gamePin.value }, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined)
+    gameStatus.value.locked = false
+    showUnlockDialog.value = false
+    gamePin.value = ''
+    await loadGameStatus()
   } catch (error) {
-    console.error('Error unlocking game:', error);
+    console.error('Error unlocking game:', error)
+    unlockError.value = error?.response?.data?.error || 'No autorizado o PIN inválido'
   }
 }
 
@@ -1712,4 +1728,13 @@ function getDifficultyColor(difficulty) {
     padding: 1rem 0.5rem;
   }
 }
+
+/* Tablas: permitir scroll horizontal en pantallas pequeñas */
+.v-data-table { overflow-x: auto; display: block; }
+
+/* Diálogos más seguros en móviles con contenido largo */
+.v-dialog .v-card { max-height: 90dvh; overflow: auto; }
+
+/* Truncado de texto utilitario ya usado en celdas */
+.text-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>

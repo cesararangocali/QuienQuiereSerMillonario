@@ -1,25 +1,38 @@
 import { Router } from 'express';
 import express from 'express';
 import { adminOnly, authRequired } from '../middlewares/auth.js';
-import { lockGame, unlockGame } from '../middlewares/lock.js';
+import { lockGame, unlockGame, setLock, clearLock, lockMeta } from '../middlewares/lock.js';
+import { getIO } from '../services/ioHub.js';
+import { AdminEvent } from '../models/AdminEvent.js';
 import { Question } from '../models/Question.js';
 import { Prayer } from '../models/Prayer.js';
 import { Ranking } from '../models/Ranking.js';
 
 const router = Router();
 
-router.post('/lock', authRequired, adminOnly, (req, res) => {
-  const { pin } = req.body;
-  if (pin !== process.env.GAME_LOCK_PIN) return res.status(401).json({ error: 'PIN inválido' });
-  lockGame();
-  res.json({ locked: true });
+router.get('/lock/status', authRequired, adminOnly, (_req, res) => {
+  res.json(lockMeta());
 });
 
-router.post('/unlock', authRequired, adminOnly, (req, res) => {
+router.post('/lock', authRequired, adminOnly, async (req, res) => {
+  const { pin, reason } = req.body;
+  if (pin !== process.env.GAME_LOCK_PIN) return res.status(401).json({ error: 'PIN inválido' });
+  setLock(reason, req.user?.name || 'admin');
+  try { await AdminEvent.create({ userId: req.user?.id || null, username: req.user?.name || 'admin', action: 'lock', reason: reason||null }); } catch {}
+  const io = getIO();
+  io?.emit('force-logout', { reason: reason || 'Sitio bloqueado por jornada masiva' });
+  io?.emit('lock-status', lockMeta());
+  res.json({ locked: true, ...lockMeta() });
+});
+
+router.post('/unlock', authRequired, adminOnly, async (req, res) => {
   const { pin } = req.body;
   if (pin !== process.env.GAME_LOCK_PIN) return res.status(401).json({ error: 'PIN inválido' });
-  unlockGame();
-  res.json({ locked: false });
+  clearLock();
+  try { await AdminEvent.create({ userId: req.user?.id || null, username: req.user?.name || 'admin', action: 'unlock', reason: null }); } catch {}
+  const io = getIO();
+  io?.emit('lock-status', lockMeta());
+  res.json({ locked: false, ...lockMeta() });
 });
 
 // Questions CRUD

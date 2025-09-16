@@ -1,7 +1,7 @@
 <template>
   <div>
     <v-card v-if="question" class="pa-4 qqss-ring" elevation="8">
-      <v-card-title class="text-h6 text-center py-4">{{ question.text }}</v-card-title>
+      <v-card-title class="text-h6 text-center py-4 question-title">{{ question.text }}</v-card-title>
       <v-card-text>
         <v-row dense>
           <v-col cols="12" md="6" v-for="(opt, i) in options" :key="i">
@@ -41,6 +41,22 @@ defineProps({
 </script>
 
 <style scoped>
+.question-title {
+  white-space: normal;
+  line-height: 1.3;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .question-title {
+    font-size: 1rem !important;
+    max-height: 28vh;
+    overflow-y: auto;
+    padding-right: 6px; /* espacio para el scrollbar */
+  }
+}
+
 .selected-option {
   background: linear-gradient(135deg, rgba(63,81,181,0.3) 0%, rgba(63,81,181,0.1) 100%) !important;
   border: 2px solid #3f51b5 !important;
@@ -75,6 +91,8 @@ defineProps({
 .option-text {
   font-size: 1rem;
   font-weight: 500;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .qqss-option:disabled {

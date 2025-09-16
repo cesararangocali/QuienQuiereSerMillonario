@@ -7,6 +7,7 @@ import { sequelize } from './config/db.js';
 import { createAdminIfNotExists } from './models/User.js';
 import routes from './routes/index.js';
 import { attachGameSocket } from './services/realtime.js';
+import { setIO } from './services/ioHub.js';
 
 const app = express();
 app.use(cors());
@@ -19,6 +20,7 @@ app.use('/api', routes);
 const server = http.createServer(app);
 const io = new SocketIOServer(server, { cors: { origin: '*' } });
 attachGameSocket(io);
+setIO(io);
 
 const PORT = process.env.PORT || 4000;
 

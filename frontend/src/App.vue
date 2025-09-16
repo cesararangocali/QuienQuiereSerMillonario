@@ -1,13 +1,12 @@
 <template>
   <v-app>
-    
+    <LockModal />
 
-  <v-main class="pb-0">
+    <v-main class="pb-0">
       <router-view />
     </v-main>
-    
-    <!-- Footer elegante -->
-    <v-footer v-if="showBar" class="qqss-footer">
+
+  <v-footer class="qqss-footer">
       <v-container>
         <v-row align="center" justify="space-between" no-gutters>
           <v-col cols="12" md="4" class="text-center text-md-start">
@@ -17,9 +16,12 @@
             </div>
             <div class="footer-subtitle">Aprende, juega y crece en la fe</div>
           </v-col>
-          
+
           <v-col cols="12" md="4" class="text-center my-3 my-md-0">
             <div class="footer-links">
+              <v-btn variant="text" size="small" prepend-icon="mdi-home" class="footer-link" to="/">
+                Inicio
+              </v-btn>
               <v-btn variant="text" size="small" prepend-icon="mdi-heart" class="footer-link">
                 Donaciones
               </v-btn>
@@ -31,7 +33,7 @@
               </v-btn>
             </div>
           </v-col>
-          
+
           <v-col cols="12" md="4" class="text-center text-md-end">
             <div class="footer-social">
               <v-btn icon size="small" class="footer-social-btn">
@@ -51,45 +53,58 @@
         </v-row>
       </v-container>
     </v-footer>
-    
+
     <audio ref="audioRef" src="/audio/bg.mp3" loop preload="none"></audio>
   </v-app>
+  
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue';
-import { useRouter } from 'vue-router';
-import { useI18n } from 'vue-i18n';
-import { useRoute } from 'vue-router';
-const audioRef = ref();
-const playing = ref(false);
-const langs = ['es','en'];
-const lang = ref('es');
-const { locale } = useI18n();
-const route = useRoute();
-const router = useRouter();
-const showBar = computed(() => !['/juego','/competitivo'].includes(route.path));
-const currentYear = computed(() => new Date().getFullYear());
+import { ref, watch, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import { io } from 'socket.io-client'
+import LockModal from './components/LockModal.vue'
+import { useLockStore } from './store/lock'
 
-// Acceso oculto al panel de administración: 5 clics en la marca del footer en 6s
-const secretClicks = ref(0);
-let secretTimer = null;
+// Sockets y bloqueo global
+const lock = useLockStore()
+const adminToken = localStorage.getItem('adminToken') || undefined
+const socketUrl = import.meta.env?.VITE_SOCKET_URL || ''
+const ioClient = io(socketUrl, { path: '/socket.io', transports: ['websocket','polling'], withCredentials: false, auth: { token: adminToken } })
+ioClient.on('force-logout', (p)=>{ lock.setLocked(true, { reason: p?.reason }) })
+ioClient.on('lock-status', (meta)=>{ lock.setLocked(!!meta?.locked, meta) })
+
+// Footer y utilidades
+const audioRef = ref()
+const playing = ref(false)
+const langs = ['es','en']
+const lang = ref('es')
+const { locale } = useI18n()
+const route = useRoute()
+const router = useRouter()
+const currentYear = computed(() => new Date().getFullYear())
+
+// Acceso oculto al panel de administración: 5 clics en 6s
+const secretClicks = ref(0)
+let secretTimer = null
 function onSecretClick(){
   if (secretClicks.value === 0) {
-    secretTimer = setTimeout(() => { secretClicks.value = 0; }, 6000);
+    secretTimer = setTimeout(() => { secretClicks.value = 0 }, 6000)
   }
-  secretClicks.value += 1;
+  secretClicks.value += 1
   if (secretClicks.value >= 5) {
-    if (secretTimer) { clearTimeout(secretTimer); secretTimer = null; }
-    secretClicks.value = 0;
-    router.push('/admin');
+    if (secretTimer) { clearTimeout(secretTimer); secretTimer = null }
+    secretClicks.value = 0
+    router.push('/admin')
   }
 }
 
 function toggleMusic(){
-  const a = audioRef.value; if(!a) return;
-  if (playing.value) { a.pause(); playing.value = false; }
-  else { a.play().then(()=> playing.value = true).catch(()=>{}); }
+  const a = audioRef.value; if(!a) return
+  if (playing.value) { a.pause(); playing.value = false }
+  else { a.play().then(()=> playing.value = true).catch(()=>{}) }
 }
-watch(lang, (v)=> locale.value = v);
+
+watch(lang, (v)=> locale.value = v)
 </script>

@@ -1,4 +1,6 @@
 import { Question } from '../models/Question.js';
+import jwt from 'jsonwebtoken';
+import { isLocked } from '../middlewares/lock.js';
 import { Ranking } from '../models/Ranking.js';
 import { GameSession } from '../models/GameSession.js';
 import { GameAnswer } from '../models/GameAnswer.js';
@@ -100,6 +102,16 @@ function finish(io, roomId){
 
 export function attachGameSocket(io) {
   io.on('connection', (socket) => {
+    try {
+      const token = socket.handshake.auth?.token || null;
+      if (isLocked()) {
+        if (!token) { socket.emit('force-logout', { reason: 'Sitio bloqueado' }); return socket.disconnect(true); }
+        const payload = jwt.verify(token, process.env.JWT_SECRET);
+        if (payload?.role !== 'admin') { socket.emit('force-logout', { reason: 'Sitio bloqueado' }); return socket.disconnect(true); }
+      }
+    } catch { socket.emit('force-logout', { reason: 'Sitio bloqueado' }); return socket.disconnect(true); }
+
+    socket.emit('lock-status', { locked: isLocked() });
     socket.on('join-room', (roomId, playerName) => {
       const room = getRoom(roomId);
       room.players.set(socket.id, { name: playerName || 'Jugador', score: 0, answered: null });

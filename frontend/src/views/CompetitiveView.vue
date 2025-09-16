@@ -170,7 +170,8 @@ import { useGameSounds } from '../composables/useGameSounds.js'
 import { appIcons } from '../constants/icons'
 
 const socketUrl = import.meta.env?.VITE_SOCKET_URL || ''
-const socket = io(socketUrl, { path: '/socket.io', transports: ['websocket', 'polling'], withCredentials: false })
+const adminToken = localStorage.getItem('adminToken') || undefined
+const socket = io(socketUrl, { path: '/socket.io', transports: ['websocket', 'polling'], withCredentials: false, auth: { token: adminToken } })
 
 // Sonidos
 const { playQuestion, playFinalAnswer, playCorrect, playWrong, toggleMute, isMuted, stopAll } = useGameSounds()
@@ -270,4 +271,14 @@ watch(timeExpired, (v) => {
 .center-viewport { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; justify-content: center; }
 .header-stats { position: absolute; left: 0; top: 50%; transform: translateY(-50%); padding-left: 8px; }
 .control-field { width: 100%; max-width: 720px; }
+
+@media (max-width: 600px) {
+  .header-stats { position: static; transform: none; padding: 0; margin-bottom: 8px; justify-content: center; }
+}
+
+.game-stage { max-height: 100dvh; overflow: auto; }
+
+@media (max-width: 600px) {
+  .control-field { max-width: 100%; }
+}
 </style>

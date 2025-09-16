@@ -1,10 +1,10 @@
 <template>
   <v-container class="py-0" :class="{ 'center-viewport': started }" @click="handleFirstInteraction">
     <!-- Header del juego (oculto cuando el juego está en curso) -->
-    <section v-if="!started" class="qqss-hero text-center mb-4">
+  <section v-if="!started" class="qqss-hero text-center mb-3">
       <div class="qqss-title">¿Quién quiere ser santo?</div>
       <div class="qqss-sub">Demuestra tu conocimiento de la fe</div>
-      <div class="mt-4 d-flex justify-center ga-4 flex-wrap">
+  <div class="mt-3 d-flex justify-center ga-4 flex-wrap">
         <v-btn size="large" variant="tonal" color="primary" class="qqss-ring secondary-btn" to="/" prepend-icon="mdi-home">Inicio</v-btn>
         <v-btn size="large" variant="tonal" color="grey" class="qqss-ring secondary-btn" @click="showRanking = true" prepend-icon="mdi-trophy">Ranking</v-btn>
         
@@ -30,8 +30,8 @@
       </div>
     </section>
 
-    <!-- Área del juego -->
-    <v-card class="pa-4 qqss-ring game-stage position-relative" elevation="12" style="width: 100%;">
+  <!-- Área del juego (padding vertical sutil) -->
+  <v-card class="pa-3 py-2 qqss-ring game-stage position-relative" elevation="12" style="width: 100%;">
       <!-- Botón salir (X) flotante arriba-derecha -->
       <v-tooltip v-if="started" text="Salir del juego" location="bottom">
         <template #activator="{ props }">
@@ -48,7 +48,7 @@
           </v-btn>
         </template>
       </v-tooltip>
-      <v-card-title class="d-flex align-center justify-center position-relative">
+  <v-card-title class="d-flex align-center justify-center position-relative py-2">
         <!-- Ronda y Puntos anclados al costado superior izquierdo -->
         <div v-if="started" class="d-flex align-center ga-6 header-stats">
           <div class="game-stat">
@@ -60,16 +60,16 @@
             <div class="stat-value text-yellow-accent-3">{{ points }}</div>
           </div>
         </div>
-        <!-- Título centrado -->
-        <div class="d-flex align-center ga-3">
+        <!-- Título centrado (oculto en móviles) -->
+        <div class="d-flex align-center ga-3 header-main-title">
           <v-icon icon="mdi-gamepad-variant" size="large" color="accent" />
           <span class="text-h4 font-weight-bold">JUEGO</span>
         </div>
       </v-card-title>
-      <v-divider class="my-4" />
+  <v-divider class="my-2" />
       
       <!-- Temporizador - visible cuando el juego haya comenzado -->
-      <div v-if="started" class="text-center mb-4">
+      <div v-if="started" class="text-center mb-2 mt-1">
         <div class="d-flex justify-center ga-8 align-center">
           <Timer 
             v-if="timePerLevel > 0"
@@ -228,7 +228,7 @@
     />
 
     <!-- Dialog de fin de juego con opciones -->
-    <v-dialog v-model="gameEndDialog.show" max-width="500" persistent>
+    <v-dialog v-if="!showVictory" v-model="gameEndDialog.show" max-width="500" persistent>
       <v-card class="game-dialog qqss-ring text-center" elevation="20">
         <div class="game-dialog-header">
           <v-icon icon="mdi-trophy" color="gold" size="48" class="dialog-icon" />
@@ -268,6 +268,17 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Nuevo modal de victoria con animaciones -->
+    <VictoryModal
+      v-model="showVictory"
+      :title="victoryTitle"
+      :message="victoryMessage"
+      :points="gameEndDialog.points"
+      :confetti-delay-ms="victoryConfettiDelayMs"
+      @play-again="playAgainSameUser"
+      @change-user="playAgainNewUser"
+    />
 
     <!-- Dialog de bienvenida antes de comenzar -->
     <v-dialog v-model="welcomeDialog.show" max-width="520" persistent>
@@ -325,6 +336,7 @@ import Animations from '../components/Animations.vue';
 import MoneyLadder from '../components/MoneyLadder.vue';
 import GameDialog from '../components/GameDialog.vue';
 import RankingPopup from '../components/RankingPopup.vue';
+import VictoryModal from '../components/VictoryModal.vue';
 import { useGameSounds } from '../composables/useGameSounds.js';
 import { LADDER_VALUES } from '../constants/ladder.js';
 
@@ -468,15 +480,13 @@ function showGameEndDialog(title, message, points) {
   gameEndDialog.show = true;
 }
 
-function onGameEndDialogClose() {
-  gameEndDialog.show = false;
-}
+// Estado para modal de victoria
+const showVictory = ref(false)
+const victoryTitle = ref('')
+const victoryMessage = ref('')
+const victoryConfettiDelayMs = ref(220)
 
-// Variable para controlar el cierre del dialog de explicaciones
-let explanationResolver = null;
-let explanationTimeout = null;
-
-// Función específica para mostrar explicaciones con espera
+// Función específica para mostrar explicaciones with espera
 async function showExplanationDialog(explanation, isCorrect) {
   const title = isCorrect ? '¡Respuesta Correcta!' : 'Respuesta Incorrecta';
   const type = isCorrect ? 'success' : 'info';
@@ -567,6 +577,7 @@ function resetGame() {
   started.value = false;
   timerPaused.value = false;
   gameEndDialog.show = false;
+  showVictory.value = false;
   
   // Limpiar audio
   stopSuspense();
@@ -718,7 +729,11 @@ async function next() {
           message += ` Tu puntaje ha sido registrado en el ranking.`;
         }
         
-        showGameEndDialog('¡Felicitaciones!', message, points.value);
+        // Mostrar modal de victoria animado
+        victoryTitle.value = '¡Felicitaciones!';
+        victoryMessage.value = message;
+        gameEndDialog.show = false;
+        showVictory.value = true;
         return;
       }
       await loadQuestion();
@@ -999,6 +1014,9 @@ function handleFirstInteraction() {
   font-weight: 800;
   color: #c7b7ff;
   text-shadow: 0 0 8px rgba(199,183,255,0.6);
+}
+@media (max-width: 600px) {
+  .header-main-title { display: none; }
 }
 @keyframes pulse {
   0% { transform: scale(1); }
