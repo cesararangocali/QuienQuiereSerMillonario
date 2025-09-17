@@ -63,15 +63,13 @@
 import { ref, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { io } from 'socket.io-client'
+import { createSocket } from './utils/socket'
 import LockModal from './components/LockModal.vue'
 import { useLockStore } from './store/lock'
 
 // Sockets y bloqueo global
 const lock = useLockStore()
-const adminToken = localStorage.getItem('adminToken') || undefined
-const socketUrl = import.meta.env?.VITE_SOCKET_URL || ''
-const ioClient = io(socketUrl, { path: '/socket.io', transports: ['websocket','polling'], withCredentials: false, auth: { token: adminToken } })
+const ioClient = createSocket()
 ioClient.on('force-logout', (p)=>{ lock.setLocked(true, { reason: p?.reason }) })
 ioClient.on('lock-status', (meta)=>{ lock.setLocked(!!meta?.locked, meta) })
 

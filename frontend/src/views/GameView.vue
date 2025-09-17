@@ -1,10 +1,10 @@
 <template>
   <v-container class="py-0" :class="{ 'center-viewport': started }" @click="handleFirstInteraction">
     <!-- Header del juego (oculto cuando el juego está en curso) -->
-  <section v-if="!started" class="qqss-hero text-center mb-3">
+  <section v-if="!started" class="qqss-hero text-center mb-1">
       <div class="qqss-title">¿Quién quiere ser santo?</div>
       <div class="qqss-sub">Demuestra tu conocimiento de la fe</div>
-  <div class="mt-3 d-flex justify-center ga-4 flex-wrap">
+      <div class="mt-4 d-flex justify-center ga-4 flex-wrap align-center">
         <v-btn size="large" variant="tonal" color="primary" class="qqss-ring secondary-btn" to="/" prepend-icon="mdi-home">Inicio</v-btn>
         <v-btn size="large" variant="tonal" color="grey" class="qqss-ring secondary-btn" @click="showRanking = true" prepend-icon="mdi-trophy">Ranking</v-btn>
         
@@ -140,6 +140,56 @@
           </template>
         </v-combobox>
   <v-btn color="indigo" size="large" @click="start" prepend-icon="mdi-play">Comenzar</v-btn>
+      </div>
+      <!-- Filtros previos al juego -->
+      <div v-if="!started" class="mb-3">
+        <v-card variant="tonal" color="primary" class="pa-3 qqss-ring">
+          <div class="text-subtitle-1 font-weight-bold mb-2 d-flex align-center ga-2">
+            <v-icon size="20">mdi-filter-outline</v-icon>
+            Configura tu partida
+            <v-spacer />
+            <v-btn size="small" variant="text" color="secondary" prepend-icon="mdi-filter-remove-outline" @click="resetGameFilters">Limpiar</v-btn>
+          </div>
+          <div class="d-flex ga-2 flex-wrap">
+            <v-select
+              v-model="prefMode"
+              :items="[
+                { title: 'Solo General', value: 'general' },
+                { title: 'General + Matrimonios', value: 'matrimonios' }
+              ]"
+              label="Modo"
+              density="comfortable"
+              hide-details
+              style="min-width:220px"
+            />
+            <v-select
+              v-model="prefCategory"
+              :items="[{ title: 'Todas', value: '' }, ...categoriesItems]"
+              label="Categoría"
+              density="comfortable"
+              hide-details
+              clearable
+              style="min-width:220px"
+            />
+            <v-select
+              v-model="prefCategory2"
+              :items="[{ title: 'Todas', value: '' }, ...categories2Items]"
+              label="Categoría 2"
+              density="comfortable"
+              hide-details
+              clearable
+              style="min-width:220px"
+            />
+            <v-select
+              v-model="prefStartDifficulty"
+              :items="startDifficultyItems"
+              label="Dificultad inicial"
+              density="comfortable"
+              hide-details
+              style="min-width:200px"
+            />
+          </div>
+        </v-card>
       </div>
       
       <!-- Información del jugador seleccionado o mensaje de nuevo jugador -->
@@ -289,7 +339,6 @@
         </div>
         <v-card-text class="dialog-content">
           <p class="dialog-message">{{ welcomeDialog.message }}</p>
-          <div class="text-medium-emphasis mt-2">Sonido de introducción reproduciéndose…</div>
           <div class="text-left mt-4">
             <div class="text-subtitle-2 mb-1">Reglas del juego</div>
             <ul class="text-body-2 pl-6">
@@ -374,6 +423,8 @@ const options = ref([]);
 
 // Control del ranking
 const showRanking = ref(false);
+// Modo de categorías: por defecto solo General; si se habilita incluye Matrimonios
+const includeMatrimonios = ref(false);
 
 // Lista de jugadores previos para autocompletado
 const previousPlayers = ref([]);
@@ -486,6 +537,10 @@ const victoryTitle = ref('')
 const victoryMessage = ref('')
 const victoryConfettiDelayMs = ref(220)
 
+// Control de flujo para el diálogo de explicación
+let explanationResolver = null
+let explanationTimeout = null
+
 // Función específica para mostrar explicaciones with espera
 async function showExplanationDialog(explanation, isCorrect) {
   const title = isCorrect ? '¡Respuesta Correcta!' : 'Respuesta Incorrecta';
@@ -585,7 +640,12 @@ function resetGame() {
 
 async function loadQuestion() {
   try {
-    const { data } = await axios.get(`/api/game/question/${difficulty.value}`);
+  const mode = (prefMode?.value || (includeMatrimonios.value ? 'matrimonios' : 'general'));
+  const params = new URLSearchParams();
+  params.set('mode', mode);
+  if (prefCategory?.value) params.set('category', prefCategory.value);
+  if (prefCategory2?.value) params.set('category2', prefCategory2.value);
+  const { data } = await axios.get(`/api/game/question/${difficulty.value}?${params.toString()}`);
     question.value = data;
     // Barajar opciones para aleatorizar la posición de la respuesta correcta
     const order = data.options.map((_, i) => i);
@@ -702,18 +762,20 @@ async function next() {
     const pickedOriginal = indexMap.value[selected.value];
     const { data } = await axios.post('/api/game/answer', { questionId: question.value.id, index: pickedOriginal });
     
-    if (data.correct) {
+  if (data.correct) {
   // Asignar puntos según la escalera visible
   const stepIndex = Math.max(0, Math.min(LADDER_VALUES.length - 1, difficulty.value - 1));
   points.value += LADDER_VALUES[stepIndex];
       animState.value = 'correct'; setTimeout(()=> animState.value = '', 800);
       playCorrect();
       
-      // Mostrar explicación de la respuesta correcta
-      try {
-        await showExplanationDialog(data.explanation || 'Respuesta correcta. ¡Bien hecho!', true);
-      } catch (explanationError) {
-        console.error('Error showing explanation:', explanationError);
+      // Si aún no es victoria, mostrar explicación en un único diálogo y continuar
+      if (difficulty.value < 15) {
+        try {
+          await showExplanationDialog(data.explanation || 'Respuesta correcta. ¡Bien hecho!', true);
+        } catch (explanationError) {
+          console.error('Error showing explanation:', explanationError);
+        }
       }
       
       difficulty.value++;
@@ -722,6 +784,10 @@ async function next() {
         playVictory();
         const scoreResult = await submitScore();
         let message = '¡Has completado todas las preguntas y te has convertido en santo! Has demostrado un conocimiento excepcional de la fe.';
+        // Añadir explicación final si viene disponible desde backend
+        if (data?.explanation) {
+          message += `\n\nExplicación: ${data.explanation}`;
+        }
         
         if (scoreResult?.updated) {
           message += ` ¡Nuevo récord personal! Tu puntaje anterior ha sido actualizado.`;
@@ -729,7 +795,7 @@ async function next() {
           message += ` Tu puntaje ha sido registrado en el ranking.`;
         }
         
-        // Mostrar modal de victoria animado
+        // Mostrar modal de victoria animado (ya con la explicación integrada si aplica)
         victoryTitle.value = '¡Felicitaciones!';
         victoryMessage.value = message;
         gameEndDialog.show = false;
@@ -741,16 +807,12 @@ async function next() {
       animState.value = 'wrong'; setTimeout(()=> animState.value = '', 800);
       stopSuspense();
       playWrong();
-      
-      // Mostrar explicación de la respuesta incorrecta
-      try {
-        await showExplanationDialog(data.explanation || 'Respuesta incorrecta. ¡Sigue practicando!', false);
-      } catch (explanationError) {
-        console.error('Error showing explanation:', explanationError);
-      }
-      
+      // Unificar: integrar la explicación directamente en el mensaje de fin de juego
       const scoreResult = await submitScore();
       let message = `No te preocupes, ¡sigue practicando para crecer en la fe! Llegaste hasta el nivel ${difficulty.value}.`;
+      if (data?.explanation) {
+        message += `\n\nExplicación: ${data.explanation}`;
+      }
       
       if (scoreResult?.updated) {
         message += ` ¡Nuevo récord personal! Tu puntaje anterior ha sido actualizado.`;
@@ -875,6 +937,8 @@ async function startAfterWelcome() {
           setTimeout(async () => {
             welcomeDialog.ticking = false;
             welcomeDialog.show = false;
+            // Aplicar dificultad inicial elegida en filtros
+            difficulty.value = Number(prefStartDifficulty?.value || 1);
             started.value = true;
             stopAll();
             playQuestion();
@@ -966,12 +1030,50 @@ function getPlayerInfo(name) {
 onMounted(() => {
   loadPreviousPlayers();
   initializeSounds();
+  loadCategoriesForFilters();
   // No reproducir intro automáticamente - esperaremos la primera interacción del usuario
 });
+
+// Estado de filtros previos al juego
+const prefMode = ref('general');
+const prefCategory = ref('');
+const prefCategory2 = ref('');
+const prefStartDifficulty = ref(1);
+const categoriesItems = ref([]);
+const categories2Items = ref([]);
+const startDifficultyItems = Array.from({ length: 15 }, (_, i) => ({ title: `Nivel ${i+1}`, value: i+1 }));
+
+async function loadCategoriesForFilters() {
+  try {
+    const { data } = await axios.get('/api/game/categories');
+    categoriesItems.value = (data.categories || []).map(c => ({ title: c, value: c }));
+    categories2Items.value = (data.categories2 || []).map(c => ({ title: c, value: c }));
+  } catch (e) {
+    console.error('Error loading categories for filters', e);
+    categoriesItems.value = [];
+    categories2Items.value = [];
+  }
+}
+
+function resetGameFilters() {
+  prefMode.value = 'general';
+  prefCategory.value = '';
+  prefCategory2.value = '';
+  prefStartDifficulty.value = 1;
+}
 
 // Watcher para actualizar información del jugador seleccionado
 watch(playerName, () => {
   updateSelectedPlayerInfo();
+});
+
+// Sincronizar modo entre switch heredado e interfaz de filtros
+watch(prefMode, (v) => {
+  includeMatrimonios.value = (v === 'matrimonios');
+});
+watch(includeMatrimonios, (v) => {
+  const next = v ? 'matrimonios' : 'general';
+  if (prefMode.value !== next) prefMode.value = next;
 });
 
 // Función para habilitar audio con cualquier interacción

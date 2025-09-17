@@ -4,7 +4,7 @@
     <section v-if="!started" class="qqss-hero text-center mb-4">
       <div class="qqss-title">Catequesis</div>
       <div class="qqss-sub">Aprende y profundiza: sin límite de tiempo</div>
-      <div class="mt-6 d-flex flex-column align-center ga-4 controls-vertical">
+  <div class="mt-6 d-flex flex-column align-center ga-4 controls-vertical">
         <v-text-field
           v-model="playerName"
           label="Tu nombre (opcional)"
@@ -27,6 +27,14 @@
             />
           </div>
         </div>
+        <v-switch
+          v-model="includeMatrimonios"
+          inset
+          color="teal"
+          hide-details
+          class="control-field"
+          :label="includeMatrimonios ? 'Modo: General + Matrimonios' : 'Modo: Solo General'"
+        />
         <div class="d-flex ga-4 justify-center control-field">
           <v-btn size="large" color="teal" class="qqss-ring start-btn" @click="start" :prepend-icon="appIcons.start">
             Comenzar
@@ -177,6 +185,7 @@ const options = ref([])
 const indexMap = ref([])
 const selected = ref(null)
 const used = reactive({ fifty: false, verse: false, call: false })
+const includeMatrimonios = ref(false)
 
 // Métricas derivadas
 const rangeSpan = computed(() => Math.max(1, (range.value?.[1] ?? 15) - (range.value?.[0] ?? 1) + 1))
@@ -214,7 +223,8 @@ const endDialog = reactive({ show: false, title: '', message: '' })
 
 async function loadQuestion() {
   try {
-  const { data } = await axios.get(`/api/game/question/${difficultyLevel.value}`)
+  const mode = includeMatrimonios.value ? 'matrimonios' : 'general'
+  const { data } = await axios.get(`/api/game/question/${difficultyLevel.value}?mode=${mode}`)
     question.value = data
     const order = data.options.map((_, i) => i)
     for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [order[i], order[j]] = [order[j], order[i]] }

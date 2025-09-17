@@ -74,7 +74,16 @@
           </v-list>
         </v-col>
         <v-col cols="12" md="6" class="d-flex align-center justify-center">
-          <v-btn color="indigo" size="x-large" class="qqss-ring" :prepend-icon="appIcons.start" @click="startMatch">Iniciar partida</v-btn>
+          <div class="d-flex align-center ga-4 flex-column flex-sm-row">
+            <v-switch
+              v-model="includeMatrimonios"
+              color="indigo"
+              inset
+              hide-details
+              :label="includeMatrimonios ? 'General + Matrimonios' : 'Solo General'"
+            />
+            <v-btn color="indigo" size="x-large" class="qqss-ring" :prepend-icon="appIcons.start" @click="startMatch">Iniciar partida</v-btn>
+          </div>
         </v-col>
       </v-row>
     </v-card>
@@ -164,14 +173,12 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
-import { io } from 'socket.io-client'
+import { createSocket } from '../utils/socket'
 import QuestionCard from '../components/QuestionCard.vue'
 import { useGameSounds } from '../composables/useGameSounds.js'
 import { appIcons } from '../constants/icons'
 
-const socketUrl = import.meta.env?.VITE_SOCKET_URL || ''
-const adminToken = localStorage.getItem('adminToken') || undefined
-const socket = io(socketUrl, { path: '/socket.io', transports: ['websocket', 'polling'], withCredentials: false, auth: { token: adminToken } })
+const socket = createSocket()
 
 // Sonidos
 const { playQuestion, playFinalAnswer, playCorrect, playWrong, toggleMute, isMuted, stopAll } = useGameSounds()
@@ -192,6 +199,10 @@ const deadline = ref(null)
 const now = ref(Date.now())
 let ticker = null
 
+// Modo de categorías: por defecto solo "General"
+const includeMatrimonios = ref(false)
+const mode = computed(() => includeMatrimonios.value ? 'matrimonios' : 'general')
+
 const myScore = computed(() => scores.value[playerName.value] || 0)
 const sortedScores = computed(() => Object.entries(scores.value).map(([name, score]) => ({ name, score })).sort((a,b)=>b.score-a.score))
 const correctLetter = computed(() => result.value ? String.fromCharCode(65 + (result.value.correctIndex ?? 0)) : '')
@@ -200,7 +211,7 @@ function joinRoom(){
   socket.emit('join-room', roomId.value.trim(), playerName.value.trim())
 }
 
-function startMatch(){ socket.emit('start-competitive', roomId.value) }
+function startMatch(){ socket.emit('start-competitive', roomId.value, { mode: mode.value }) }
 
 function onSelect(i){ selected.value = i }
 

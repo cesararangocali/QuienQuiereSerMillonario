@@ -1,5 +1,5 @@
 <template>
-  <v-dialog v-model="internalShow" max-width="760" persistent>
+  <v-dialog v-model="internalShow" max-width="760" persistent scrim="rgba(0,0,0,0.6)">
     <v-card class="victory-card qqss-ring" elevation="24">
       <div class="cele-bg" />
       <div class="confetti-layer">
@@ -166,14 +166,17 @@ const trophyGlowStyle = computed(() => {
 .victory-card {
   position: relative;
   overflow: hidden;
-  background: radial-gradient(ellipse at top, rgba(255,255,255,0.06), rgba(103,80,164,0.08));
+  background:
+    linear-gradient(180deg, rgba(10, 12, 28, 0.92), rgba(10, 12, 28, 0.88)),
+    radial-gradient(ellipse at top, rgba(255,255,255,0.06), rgba(103,80,164,0.08));
+  color: #fff;
 }
 .cele-bg {
   position: absolute;
   inset: 0;
-  background: conic-gradient(from 180deg at 50% 50%, rgba(255,215,64,0.18), rgba(103,80,164,0.18), rgba(0,184,212,0.18), rgba(255,215,64,0.18));
-  filter: blur(24px);
-  opacity: .45;
+  background: conic-gradient(from 180deg at 50% 50%, rgba(255,215,64,0.16), rgba(103,80,164,0.16), rgba(0,184,212,0.16), rgba(255,215,64,0.16));
+  filter: blur(22px);
+  opacity: .35;
   animation: swirl 8s linear infinite;
 }
 @keyframes swirl {
@@ -207,11 +210,11 @@ const trophyGlowStyle = computed(() => {
 .burst { position: absolute; inset: -6px; border-radius: 50%; box-shadow: 0 0 0 0 rgba(255,215,64,0.5); animation: burst 1.2s ease-out 1; }
 @keyframes burst { 0% { box-shadow: 0 0 0 0 rgba(255,215,64,0.65); } 100% { box-shadow: 0 0 0 28px rgba(255,215,64,0); } }
 .victory-title { font-size: 32px; font-weight: 900; letter-spacing: .5px; margin-top: 8px; text-shadow: 0 2px 14px rgba(0,0,0,.2); }
-.victory-sub { color: rgba(255,255,255,0.7); font-size: 14px; margin-top: 2px; }
-.victory-message { font-size: 16px; margin-top: 8px; }
+.victory-sub { color: rgba(255,255,255,0.85); font-size: 14px; margin-top: 2px; }
+.victory-message { font-size: 16px; margin-top: 8px; color: #f5f5f5; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
 .fade-in-up { animation: fin 600ms ease-out 1 both; }
 @keyframes fin { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-.points-badge { margin-top: 14px; display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 999px; background: rgba(255,255,255,0.06); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08), 0 8px 26px rgba(0,0,0,.18); backdrop-filter: blur(4px); }
+.points-badge { margin-top: 14px; display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 999px; background: rgba(33,33,33,0.5); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12), 0 8px 26px rgba(0,0,0,.28); backdrop-filter: blur(3px); }
 .points-text { font-size: 22px; font-weight: 800; letter-spacing: .4px; color: #ffeb3b; text-shadow: 0 0 12px rgba(255,235,59,.35); }
 
 /* Sparkles layer around trophy */

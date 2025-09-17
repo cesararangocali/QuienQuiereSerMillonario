@@ -4,20 +4,25 @@ import { isLocked } from '../middlewares/lock.js';
 import { Ranking } from '../models/Ranking.js';
 import { GameSession } from '../models/GameSession.js';
 import { GameAnswer } from '../models/GameAnswer.js';
+import { Op } from 'sequelize';
 
 const rooms = new Map();
 const QUESTION_DURATION_MS = 30000;
 const SPEED_BONUS_PER_SECOND = 5; // puntos por segundo restante
-async function getRandomByDifficulty(difficulty){
-  const count = await Question.count({ where: { difficulty } });
+async function getRandomByDifficulty(difficulty, mode = 'general'){
+  const m = (mode || 'general').toString().toLowerCase();
+  const where = m === 'matrimonios'
+    ? { difficulty, mode: { [Op.in]: ['general', 'matrimonios'] } }
+    : { difficulty, mode: 'general' };
+  const count = await Question.count({ where });
   if (!count) return null;
   const offset = Math.floor(Math.random() * count);
-  return await Question.findOne({ where: { difficulty }, offset, order: [['id','ASC']] });
+  return await Question.findOne({ where, offset, order: [['id','ASC']] });
 }
 
 function getRoom(roomId){
   if (!rooms.has(roomId)) {
-    rooms.set(roomId, { players: new Map(), difficulty: 1, current: null, timer: null, started: false, sessionId: null, questionStartAt: null });
+    rooms.set(roomId, { players: new Map(), difficulty: 1, current: null, timer: null, started: false, sessionId: null, questionStartAt: null, mode: 'general' });
   }
   return rooms.get(roomId);
 }
@@ -25,7 +30,7 @@ function getRoom(roomId){
 async function askNext(io, roomId){
   const room = getRoom(roomId);
   if (room.difficulty > 15) return finish(io, roomId);
-  const q = await getRandomByDifficulty(room.difficulty);
+  const q = await getRandomByDifficulty(room.difficulty, room.mode || 'general');
   if (!q) return finish(io, roomId);
   room.current = { id: q.id, correctIndex: q.correctIndex, text: q.text, options: q.options, explanation: q.explanation, verseHint: q.verseHint };
   // limpiar respuestas
@@ -119,10 +124,12 @@ export function attachGameSocket(io) {
       io.to(roomId).emit('player-joined', { playerName, players: Array.from(room.players.values()).map(p => ({ name: p.name, score: p.score })) });
     });
 
-    socket.on('start-competitive', async (roomId) => {
+    socket.on('start-competitive', async (roomId, options = {}) => {
       const room = getRoom(roomId);
       if (room.started) return;
       room.started = true;
+      const mode = (options?.mode || 'general').toString().toLowerCase();
+      room.mode = mode === 'matrimonios' ? 'matrimonios' : 'general';
       // Crear sesión
       try {
         const sess = await GameSession.create({ roomId });

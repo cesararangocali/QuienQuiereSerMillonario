@@ -7,6 +7,7 @@ import { AdminEvent } from '../models/AdminEvent.js';
 import { Question } from '../models/Question.js';
 import { Prayer } from '../models/Prayer.js';
 import { Ranking } from '../models/Ranking.js';
+import { GameAnswer } from '../models/GameAnswer.js';
 
 const router = Router();
 
@@ -37,7 +38,7 @@ router.post('/unlock', authRequired, adminOnly, async (req, res) => {
 
 // Questions CRUD
 router.get('/questions', authRequired, adminOnly, async (_req, res) => {
-  const list = await Question.findAll({ order: [['difficulty','ASC']] });
+  const list = await Question.findAll({ order: [['difficulty','ASC'], ['id','ASC']] });
   res.json(list);
 });
 
@@ -58,6 +59,18 @@ router.delete('/questions/:id', authRequired, adminOnly, async (req, res) => {
   if (!q) return res.status(404).json({ error: 'No encontrado' });
   await q.destroy();
   res.status(204).end();
+});
+
+// Reset total de preguntas (borra todas las preguntas)
+router.post('/questions/reset', authRequired, adminOnly, async (req, res) => {
+  try {
+    await Question.destroy({ where: {} });
+    try { await AdminEvent.create({ userId: req.user?.id || null, username: req.user?.name || 'admin', action: 'questions.reset', reason: null }); } catch {}
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Error resetting questions', e);
+    res.status(500).json({ error: 'No se pudieron borrar las preguntas' });
+  }
 });
 
 // Prayers
@@ -96,10 +109,10 @@ router.get('/questions/export', authRequired, adminOnly, async (req, res) => {
   const format = (req.query.format || 'json').toString();
   const rows = await Question.findAll({ order: [['difficulty','ASC'], ['id','ASC']] });
   if (format === 'csv') {
-    const header = 'text,options,correctIndex,difficulty,category,verseHint,explanation,source';
+  const header = 'text,options,correctIndex,difficulty,mode,category,category2,verseHint,explanation,source';
     const lines = rows.map(q => {
       const options = (q.options || []).join('|').replaceAll('\n', ' ');
-      const cells = [q.text, options, q.correctIndex, q.difficulty, q.category, q.verseHint||'', q.explanation||'', q.source||''];
+  const cells = [q.text, options, q.correctIndex, q.difficulty, q.mode || 'general', q.category, q.category2||'', q.verseHint||'', q.explanation||'', q.source||''];
       return cells.map(v => {
         const s = (v ?? '').toString().replaceAll('"', '""');
         return '"' + s + '"';
@@ -123,7 +136,9 @@ router.post('/questions/import/json', authRequired, adminOnly, async (req, res) 
     options: q.options,
     correctIndex: Number(q.correctIndex),
     difficulty: Number(q.difficulty),
+    mode: (q.mode || 'general').toString().toLowerCase(),
     category: q.category || 'General',
+    category2: q.category2 || null,
     verseHint: q.verseHint || null,
     explanation: q.explanation || null,
     source: q.source || null,
@@ -152,9 +167,9 @@ router.post('/questions/import/csv', express.text({ type: 'text/*', limit: '5mb'
       else cur += ch;
     }
     cols.push(cur);
-    const [text, optionsStr, correctIndex, difficulty, category, verseHint, explanation, source] = cols.map(c=>c.replace(/^\"|\"$/g,'').trim());
+  const [text, optionsStr, correctIndex, difficulty, mode, category, category2, verseHint, explanation, source] = cols.map(c=>c.replace(/^\"|\"$/g,'').trim());
     const options = (optionsStr||'').split('|').map(s=>s.trim());
-    out.push({ text, options, correctIndex: Number(correctIndex), difficulty: Number(difficulty), category, verseHint, explanation, source });
+  out.push({ text, options, correctIndex: Number(correctIndex), difficulty: Number(difficulty), mode: (mode||'general').toLowerCase(), category, category2: category2||null, verseHint, explanation, source });
   }
   await Question.bulkCreate(out);
   res.json({ ok: true, count: out.length });

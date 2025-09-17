@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getQuestionByDifficulty, useFiftyFifty, getVerseHint, submitScore, callAFriend, getPrayers, checkAnswer } from '../controllers/gameController.js';
+import { getQuestionByDifficulty, useFiftyFifty, getVerseHint, submitScore, callAFriend, getPrayers, checkAnswer, getCategories } from '../controllers/gameController.js';
 import { isLockedMiddleware } from '../middlewares/lock.js';
 
 const router = Router();
@@ -11,5 +11,6 @@ router.post('/lifeline/call', isLockedMiddleware, callAFriend);
 router.post('/score', isLockedMiddleware, submitScore);
 router.get('/prayers', getPrayers);
 router.post('/answer', isLockedMiddleware, checkAnswer);
+router.get('/categories', getCategories);
 
 export default router;

@@ -162,33 +162,97 @@
         <!-- Tab de Preguntas -->
         <v-window-item value="questions">
           <v-card class="qqss-ring" elevation="8">
-            <v-card-title>
-              <v-icon start>mdi-help</v-icon>
-              Gestión de Preguntas
+            <v-card-title class="d-flex align-center justify-space-between">
+              <div class="d-flex align-center">
+                <v-icon start>mdi-help</v-icon>
+                <span>Gestión de Preguntas</span>
+              </div>
+              <div class="d-flex ga-2 align-center">
+                <v-btn 
+                  color="error" 
+                  variant="outlined" 
+                  @click="showResetQuestionsDialog = true"
+                  prepend-icon="mdi-delete-alert"
+                >
+                  Borrar Todas
+                </v-btn>
+                <v-btn 
+                  color="warning" 
+                  variant="elevated" 
+                  @click="showNewQuestionDialog = true"
+                  prepend-icon="mdi-plus"
+                >
+                  Nueva Pregunta
+                </v-btn>
+              </div>
             </v-card-title>
             <v-card-text>
               <div class="d-flex justify-space-between align-center mb-4">
-                <h3>Preguntas del Juego ({{ questions.length }} total)</h3>
-                <div class="d-flex ga-2">
-                  <v-btn 
-                    color="warning" 
-                    variant="elevated" 
-                    @click="showNewQuestionDialog = true"
-                    prepend-icon="mdi-plus"
+                <h3>Filtradas: {{ filteredCount }} / {{ questions.length }}</h3>
+                <div class="d-flex ga-2 align-center" style="flex-wrap: wrap; gap: 8px;">
+                  <v-select
+                    v-model="modeFilter"
+                    :items="[
+                      { title: 'Todos los modos', value: 'all' },
+                      { title: 'Solo General', value: 'general' },
+                      { title: 'General + Matrimonios', value: 'matrimonios' }
+                    ]"
+                    label="Modo"
+                    density="comfortable"
+                    hide-details
+                    style="width: 210px"
+                  />
+                  <v-select
+                    v-model="categoryFilter"
+                    :items="categoryFilterItems"
+                    label="Categoría"
+                    density="comfortable"
+                    hide-details
+                    clearable
+                    style="width: 200px"
+                  />
+                  <v-select
+                    v-model="category2Filter"
+                    :items="secondaryFilterItems"
+                    label="Categoría 2"
+                    density="comfortable"
+                    hide-details
+                    clearable
+                    style="width: 200px"
+                  />
+                  <v-select
+                    v-model="difficultyFilter"
+                    :items="difficultyFilterItems"
+                    label="Dificultad"
+                    density="comfortable"
+                    hide-details
+                    clearable
+                    style="width: 170px"
+                  />
+                  <v-btn
+                    variant="text"
+                    color="secondary"
+                    @click="clearFilters"
+                    prepend-icon="mdi-filter-remove-outline"
                   >
-                    Nueva Pregunta
+                    Limpiar filtros
                   </v-btn>
                 </div>
               </div>
               
               <v-data-table
                 :headers="questionHeaders"
-                :items="questions"
+                :items="filteredQuestions"
                 :loading="loadingQuestions"
                 class="elevation-4"
                 no-data-text="No hay preguntas registradas"
                 items-per-page="10"
               >
+                <template v-slot:item.mode="{ item }">
+                  <v-chip :color="(item.mode||'general')==='matrimonios' ? 'indigo' : 'grey'" variant="elevated" size="small">
+                    {{ (item.mode||'general')==='matrimonios' ? 'General + Matrimonios' : 'Solo General' }}
+                  </v-chip>
+                </template>
                 <template v-slot:item.text="{ item }">
                   <div class="text-truncate" style="max-width: 300px;">
                     {{ item.text }}
@@ -333,6 +397,24 @@
       </v-window>
     </div>
 
+    <!-- Diálogo para borrar todas las preguntas -->
+    <v-dialog v-model="showResetQuestionsDialog" max-width="520">
+      <v-card>
+        <v-card-title class="text-h6">Borrar todas las preguntas</v-card-title>
+        <v-card-text>
+          <v-alert type="warning" class="mb-3">
+            Esta acción eliminará <strong>definitivamente</strong> todas las preguntas de la base de datos. No se puede deshacer.
+          </v-alert>
+          ¿Confirmas que deseas borrar todas las preguntas?
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="showResetQuestionsDialog = false">Cancelar</v-btn>
+          <v-btn color="error" :loading="loadingResetQuestions" @click="confirmResetQuestions" prepend-icon="mdi-delete">Borrar</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Dialogs para bloquear/desbloquear juego -->
     <v-dialog v-model="showLockDialog" max-width="400">
       <v-card>
@@ -436,6 +518,31 @@
                   placeholder="Selecciona o escribe nueva categoría"
                   chips
                   clearable
+                />
+              </v-col>
+              <v-col cols="6">
+                <v-combobox
+                  v-model="newQuestion.category2"
+                  label="Segunda categoría (opcional)"
+                  :items="availableSecondaryCategories"
+                  variant="outlined"
+                  placeholder="Selecciona o escribe nueva categoría secundaria"
+                  chips
+                  clearable
+                />
+              </v-col>
+            </v-row>
+
+            <v-row class="mb-2">
+              <v-col cols="12">
+                <v-switch
+                  v-model="newQuestion.mode"
+                  true-value="matrimonios"
+                  false-value="general"
+                  color="indigo"
+                  inset
+                  hide-details
+                  :label="(newQuestion.mode||'general')==='matrimonios' ? 'Modo: General + Matrimonios' : 'Modo: Solo General'"
                 />
               </v-col>
             </v-row>
@@ -611,6 +718,31 @@
                   placeholder="Selecciona o escribe nueva categoría"
                   chips
                   clearable
+                />
+              </v-col>
+              <v-col cols="6">
+                <v-combobox
+                  v-model="editingQuestion.category2"
+                  label="Segunda categoría (opcional)"
+                  :items="availableSecondaryCategories"
+                  variant="outlined"
+                  placeholder="Selecciona o escribe nueva categoría secundaria"
+                  chips
+                  clearable
+                />
+              </v-col>
+            </v-row>
+
+            <v-row class="mb-2">
+              <v-col cols="12">
+                <v-switch
+                  v-model="editingQuestion.mode"
+                  true-value="matrimonios"
+                  false-value="general"
+                  color="indigo"
+                  inset
+                  hide-details
+                  :label="(editingQuestion.mode||'general')==='matrimonios' ? 'Modo: General + Matrimonios' : 'Modo: Solo General'"
                 />
               </v-col>
             </v-row>
@@ -972,7 +1104,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import axios from 'axios';
 
@@ -1008,7 +1140,8 @@ const ranking = ref([]);
 const questions = ref([]);
 const prayers = ref([]);
 const gameStatus = ref({ locked: false });
-const availableCategories = ref([]);
+const availableCategories = ref(['General', 'Matrimonios']);
+const availableSecondaryCategories = ref([]);
 
 // Estados de carga
 const loadingRanking = ref(false);
@@ -1023,6 +1156,8 @@ const showNewQuestionDialog = ref(false);
 const showEditQuestionDialog = ref(false);
 const showDeleteQuestionDialog = ref(false);
 const showResetRankingDialog = ref(false);
+const showResetQuestionsDialog = ref(false);
+const loadingResetQuestions = ref(false);
 const showNewPrayerDialog = ref(false);
 const showEditPrayerDialog = ref(false);
 const showDeletePrayerDialog = ref(false);
@@ -1050,7 +1185,9 @@ const newQuestion = ref({
   options: ['', '', '', ''],
   correctIndex: null,
   difficulty: null,
-  category: '',
+  mode: 'general',
+  category: 'General',
+  category2: '',
   verseHint: '',
   explanation: '',
   source: ''
@@ -1063,10 +1200,23 @@ const editingQuestion = ref({
   options: ['', '', '', ''],
   correctIndex: null,
   difficulty: null,
-  category: '',
+  mode: 'general',
+  category: 'General',
+  category2: '',
   verseHint: '',
   explanation: '',
   source: ''
+});
+
+// Switches rápidos General/Matrimonios sincronizados con category
+const newIsMatrimonios = computed({
+  get: () => (newQuestion.value.category || '').toLowerCase() === 'matrimonios',
+  set: (v) => { newQuestion.value.category = v ? 'Matrimonios' : 'General'; }
+});
+
+const editingIsMatrimonios = computed({
+  get: () => (editingQuestion.value.category || '').toLowerCase() === 'matrimonios',
+  set: (v) => { editingQuestion.value.category = v ? 'Matrimonios' : 'General'; }
 });
 
 // Nueva oración
@@ -1094,9 +1244,34 @@ const questionHeaders = [
   { title: 'ID', key: 'id', width: '80px' },
   { title: 'Pregunta', key: 'text' },
   { title: 'Dificultad', key: 'difficulty', width: '120px' },
+  { title: 'Modo', key: 'mode', width: '170px' },
   { title: 'Categoría', key: 'category', width: '150px' },
+  { title: 'Categoría 2', key: 'category2', width: '180px' },
   { title: 'Acciones', key: 'actions', width: '120px', sortable: false }
 ];
+
+// Filtros de listado
+const modeFilter = ref('all'); // 'all' | 'general' | 'matrimonios'
+const categoryFilter = ref('all'); // 'all' | category name
+const category2Filter = ref('all'); // 'all' | category name
+const difficultyFilter = ref('all'); // 'all' | number 1..15
+const categoryFilterItems = computed(() => [{ title: 'Todas', value: 'all' }, ...availableCategories.value.map(c => ({ title: c, value: c }))]);
+const secondaryFilterItems = computed(() => [{ title: 'Todas', value: 'all' }, ...availableSecondaryCategories.value.map(c => ({ title: c, value: c }))]);
+const difficultyFilterItems = computed(() => [{ title: 'Todas', value: 'all' }, ...Array.from({ length: 15 }, (_, i) => ({ title: `Nivel ${i+1}`, value: i+1 }))]);
+const filteredQuestions = computed(() => {
+  return questions.value.filter(q => {
+    const m = (q.mode || 'general');
+    const okMode = modeFilter.value === 'all' || m === modeFilter.value;
+    const c1 = (q.category || '');
+    const okCat1 = categoryFilter.value === 'all' || c1 === categoryFilter.value;
+    const c2 = (q.category2 || '');
+    const okCat2 = category2Filter.value === 'all' || c2 === category2Filter.value;
+    const d = Number(q.difficulty) || 0;
+    const okDiff = difficultyFilter.value === 'all' || d === difficultyFilter.value;
+    return okMode && okCat1 && okCat2 && okDiff;
+  });
+});
+const filteredCount = computed(() => filteredQuestions.value.length);
 
 const prayerHeaders = [
   { title: 'ID', key: 'id', width: '80px' },
@@ -1203,8 +1378,18 @@ async function loadQuestions() {
       .filter(cat => cat && cat.trim()) // Eliminar valores vacíos o null
       .filter((cat, index, arr) => arr.indexOf(cat) === index) // Eliminar duplicados
       .sort(); // Ordenar alfabéticamente
-    
-    availableCategories.value = categories;
+    // Garantizar categorías por defecto
+    const base = new Set(['General', 'Matrimonios']);
+    categories.forEach(c => base.add(c));
+    availableCategories.value = Array.from(base).sort();
+
+    // Extraer secundarias
+    const secondary = questions.value
+      .map(q => q.category2)
+      .filter(cat => cat && cat.trim())
+      .filter((cat, index, arr) => arr.indexOf(cat) === index)
+      .sort();
+    availableSecondaryCategories.value = secondary;
   } catch (error) {
     console.error('Error loading questions:', error);
     // Si se recibió 401/403, el interceptor ya limpió la sesión
@@ -1311,6 +1496,19 @@ async function exportQuestionsCSV() {
   }
 }
 
+async function confirmResetQuestions() {
+  loadingResetQuestions.value = true;
+  try {
+    await axios.post('/api/admin/questions/reset');
+    await loadQuestions();
+    showResetQuestionsDialog.value = false;
+  } catch (error) {
+    console.error('Error resetting questions:', error);
+  } finally {
+    loadingResetQuestions.value = false;
+  }
+}
+
 async function createQuestion() {
   // Validar el formulario
   const { valid } = await questionForm.value.validate();
@@ -1323,7 +1521,9 @@ async function createQuestion() {
       options: newQuestion.value.options.filter(option => option.trim()),
       correctIndex: newQuestion.value.correctIndex,
       difficulty: newQuestion.value.difficulty,
+      mode: newQuestion.value.mode || 'general',
       category: newQuestion.value.category || 'General',
+      category2: newQuestion.value.category2?.trim() || null,
       verseHint: newQuestion.value.verseHint || null,
       explanation: newQuestion.value.explanation || null,
       source: newQuestion.value.source || null
@@ -1332,24 +1532,20 @@ async function createQuestion() {
     // Agregar la nueva pregunta a la lista
     questions.value.push(response.data);
     
-    // Actualizar lista de categorías si se agregó una nueva
+    // Actualizar listas de categorías
     const newCategory = newQuestion.value.category;
     if (newCategory && newCategory.trim() && !availableCategories.value.includes(newCategory)) {
       availableCategories.value.push(newCategory);
-      availableCategories.value.sort(); // Mantener orden alfabético
+      availableCategories.value.sort();
+    }
+    const newCat2 = newQuestion.value.category2?.trim();
+    if (newCat2 && !availableSecondaryCategories.value.includes(newCat2)) {
+      availableSecondaryCategories.value.push(newCat2);
+      availableSecondaryCategories.value.sort();
     }
     
-    // Limpiar el formulario
-    newQuestion.value = {
-      text: '',
-      options: ['', '', '', ''],
-      correctIndex: null,
-      difficulty: null,
-      category: '',
-      verseHint: '',
-      explanation: '',
-      source: ''
-    };
+    // Limpiar el formulario con defaults
+    resetQuestionForm();
     
     // Cerrar el diálogo
     showNewQuestionDialog.value = false;
@@ -1371,7 +1567,9 @@ function resetQuestionForm() {
     options: ['', '', '', ''],
     correctIndex: null,
     difficulty: null,
-    category: '',
+    mode: 'general',
+    category: 'General',
+    category2: '',
     verseHint: '',
     explanation: '',
     source: ''
@@ -1387,7 +1585,9 @@ function editQuestion(question) {
     options: [...question.options] || ['', '', '', ''],
     correctIndex: question.correctIndex,
     difficulty: question.difficulty,
-    category: question.category || '',
+    mode: (question.mode || 'general'),
+    category: question.category || 'General',
+    category2: question.category2 || '',
     verseHint: question.verseHint || '',
     explanation: question.explanation || '',
     source: question.source || ''
@@ -1410,7 +1610,9 @@ async function updateQuestion() {
       options: editingQuestion.value.options.filter(option => option.trim()),
       correctIndex: editingQuestion.value.correctIndex,
       difficulty: editingQuestion.value.difficulty,
+      mode: editingQuestion.value.mode || 'general',
       category: editingQuestion.value.category || 'General',
+      category2: editingQuestion.value.category2?.trim() || null,
       verseHint: editingQuestion.value.verseHint || null,
       explanation: editingQuestion.value.explanation || null,
       source: editingQuestion.value.source || null
@@ -1422,11 +1624,16 @@ async function updateQuestion() {
       questions.value[index] = response.data;
     }
     
-    // Actualizar lista de categorías si se agregó una nueva
+    // Actualizar listas de categorías si se agregaron nuevas
     const newCategory = editingQuestion.value.category;
     if (newCategory && newCategory.trim() && !availableCategories.value.includes(newCategory)) {
       availableCategories.value.push(newCategory);
       availableCategories.value.sort(); // Mantener orden alfabético
+    }
+    const newCat2 = editingQuestion.value.category2?.trim();
+    if (newCat2 && !availableSecondaryCategories.value.includes(newCat2)) {
+      availableSecondaryCategories.value.push(newCat2);
+      availableSecondaryCategories.value.sort();
     }
     
     // Cerrar el diálogo
@@ -1460,14 +1667,23 @@ async function confirmDeleteQuestion() {
       questions.value.splice(index, 1);
     }
     
-    // Actualizar categorías disponibles (remover categorías que ya no se usan)
+    // Recalcular categorías disponibles (manteniendo defaults)
     const usedCategories = questions.value
       .map(q => q.category)
       .filter(cat => cat && cat.trim())
       .filter((cat, index, arr) => arr.indexOf(cat) === index)
       .sort();
-    
-    availableCategories.value = usedCategories;
+    const base = new Set(['General', 'Matrimonios']);
+    usedCategories.forEach(c => base.add(c));
+    availableCategories.value = Array.from(base).sort();
+
+    // Recalcular categorías secundarias disponibles
+    const secondary = questions.value
+      .map(q => q.category2)
+      .filter(cat => cat && cat.trim())
+      .filter((cat, index, arr) => arr.indexOf(cat) === index)
+      .sort();
+    availableSecondaryCategories.value = secondary;
     
     // Cerrar el diálogo
     showDeleteQuestionDialog.value = false;
@@ -1605,6 +1821,14 @@ function getDifficultyColor(difficulty) {
   if (difficulty <= 5) return 'success';
   if (difficulty <= 10) return 'warning';
   return 'error';
+}
+
+// Filtros: limpiar a valores por defecto
+function clearFilters() {
+  modeFilter.value = 'all';
+  categoryFilter.value = 'all';
+  category2Filter.value = 'all';
+  difficultyFilter.value = 'all';
 }
 </script>
 

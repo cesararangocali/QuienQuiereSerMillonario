@@ -10,7 +10,10 @@ Question.init(
     options: { type: DataTypes.JSON, allowNull: false },
     correctIndex: { type: DataTypes.INTEGER, allowNull: false },
     difficulty: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 },
+    // Modo independiente: 'general' (por defecto) o 'matrimonios'
+    mode: { type: DataTypes.STRING, allowNull: false, defaultValue: 'general' },
     category: { type: DataTypes.STRING, allowNull: false },
+    category2: { type: DataTypes.STRING, allowNull: true },
     verseHint: { type: DataTypes.TEXT, allowNull: true },
   explanation: { type: DataTypes.TEXT, allowNull: true },
     source: { type: DataTypes.STRING, allowNull: true },

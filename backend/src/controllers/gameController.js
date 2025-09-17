@@ -2,17 +2,53 @@ import { Question } from '../models/Question.js';
 import { Ranking } from '../models/Ranking.js';
 import { Prayer } from '../models/Prayer.js';
 import { sequelize } from '../config/db.js';
+import { Op } from 'sequelize';
 
 export async function getQuestionByDifficulty(req, res) {
   const { difficulty } = req.params;
   const dnum = Number(difficulty);
-  const count = await Question.count({ where: { difficulty: dnum } });
+  // Modo independiente: 'general' (por defecto) o 'matrimonios'
+  const mode = (req.query.mode || 'general').toString().toLowerCase();
+  const where = mode === 'matrimonios'
+    ? { difficulty: dnum, mode: { [Op.in]: ['general', 'matrimonios'] } }
+    : { difficulty: dnum, mode: 'general' };
+
+  // Filtros opcionales por categoría y categoría2
+  const categoryFilter = (req.query.category || '').toString().trim();
+  const category2Filter = (req.query.category2 || '').toString().trim();
+  if (categoryFilter) where.category = categoryFilter;
+  if (category2Filter) where.category2 = category2Filter;
+  const count = await Question.count({ where });
   if (!count) return res.status(404).json({ error: 'Sin preguntas' });
   const offset = Math.floor(Math.random() * count);
-  const q = await Question.findOne({ where: { difficulty: dnum }, offset, order: [['id', 'ASC']] });
+  const q = await Question.findOne({ where, offset, order: [['id', 'ASC']] });
   if (!q) return res.status(404).json({ error: 'Sin preguntas' });
   const { id, text, options, difficulty: d, category } = q;
   res.json({ id, text, options, difficulty: d, category });
+}
+
+// Endpoint público: listar categorías y categorías secundarias disponibles
+export async function getCategories(_req, res) {
+  try {
+    const rowsCat = await Question.findAll({
+      attributes: ['category'],
+      where: { category: { [Op.ne]: null } },
+      group: ['category'],
+      order: [['category', 'ASC']]
+    });
+    const rowsCat2 = await Question.findAll({
+      attributes: ['category2'],
+      where: { category2: { [Op.ne]: null } },
+      group: ['category2'],
+      order: [['category2', 'ASC']]
+    });
+    const categories = rowsCat.map(r => r.category).filter(Boolean);
+    const categories2 = rowsCat2.map(r => r.category2).filter(Boolean);
+    res.json({ categories, categories2 });
+  } catch (e) {
+    console.error('Error fetching categories:', e);
+    res.status(500).json({ error: 'No se pudieron obtener las categorías' });
+  }
 }
 
 export async function useFiftyFifty(req, res) {
