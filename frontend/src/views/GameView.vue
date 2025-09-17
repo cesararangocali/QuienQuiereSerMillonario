@@ -235,7 +235,7 @@
             <!-- Comodines directamente debajo de las opciones -->
             <div class="d-flex align-center game-lifelines">
               <v-btn variant="elevated" color="cyan-darken-3" class="qqss-ring" @click="fiftyFifty" :disabled="used.fifty" prepend-icon="mdi-percent" size="small">50-50</v-btn>
-              <v-btn variant="elevated" color="amber-darken-3" class="qqss-ring" @click="showVerse" :disabled="used.verse" prepend-icon="mdi-lightbulb-on-outline" size="small">Pasaje iluminador</v-btn>
+              <v-btn variant="elevated" color="amber-darken-3" class="qqss-ring" @click="askAudience" :disabled="used.audience" prepend-icon="mdi-account-group" size="small">Pregunta al público</v-btn>
               <v-btn variant="elevated" color="purple-darken-3" class="qqss-ring" @click="callFriend" :disabled="used.call" prepend-icon="mdi-account-voice" size="small">Llamar a un amigo</v-btn>
             </div>
             
@@ -276,6 +276,38 @@
       :button-text="dialog.buttonText"
       @close="onDialogClose"
     />
+
+    <!-- Diálogo: Pregunta al público (QR) -->
+    <v-dialog v-model="audienceDialog.show" max-width="560" persistent>
+      <v-card class="game-dialog qqss-ring text-center" elevation="20">
+        <div class="game-dialog-header">
+          <v-icon icon="mdi-account-group" color="teal" size="48" class="dialog-icon" />
+          <h2 class="dialog-title">Pregunta al público</h2>
+        </div>
+        <v-card-text class="dialog-content">
+          <p class="dialog-message">Pide al público que escanee este código para votar:</p>
+          <div class="d-flex justify-center my-3">
+            <div class="qr-box elevation-4">
+              <v-img :src="audienceDialog.qrSrc" width="320" height="320" :contain="true" class="qr-img" />
+            </div>
+          </div>
+          <div v-if="audienceDialog.isLocalhost" class="text-caption text-warning mt-1">
+            Consejo: Abre el juego desde tu IP local (no localhost)
+            para que otros dispositivos puedan acceder al enlace.
+          </div>
+          <div class="text-caption text-medium-emphasis">O comparte el enlace:</div>
+          <div class="d-flex align-center justify-center ga-2 mt-1">
+            <v-chip variant="outlined" color="primary" class="text-truncate" style="max-width: 360px;">
+              {{ audienceDialog.url }}
+            </v-chip>
+            <v-btn size="small" variant="tonal" color="primary" @click="copyAudienceLink" prepend-icon="mdi-content-copy">Copiar</v-btn>
+          </div>
+        </v-card-text>
+        <v-card-actions class="justify-center pa-4">
+          <v-btn color="primary" size="large" variant="elevated" class="qqss-ring" prepend-icon="mdi-check" @click="audienceDialog.show = false">Listo</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- Dialog de fin de juego con opciones -->
     <v-dialog v-if="!showVictory" v-model="gameEndDialog.show" max-width="500" persistent>
@@ -442,7 +474,7 @@ const nameRules = [
 // Mapea índices visibles -> índices originales (para comodines)
 const indexMap = ref([]);
 const selected = ref(null);
-const used = reactive({ fifty: false, verse: false, call: false });
+const used = reactive({ fifty: false, audience: false, call: false });
 const points = ref(0);
 const animState = ref('');
 
@@ -626,7 +658,7 @@ function resetGame() {
   options.value = [];
   selected.value = null;
   used.fifty = false;
-  used.verse = false;
+  used.audience = false;
   used.call = false;
   animState.value = '';
   started.value = false;
@@ -761,6 +793,13 @@ async function next() {
     // Validar en backend
     const pickedOriginal = indexMap.value[selected.value];
     const { data } = await axios.post('/api/game/answer', { questionId: question.value.id, index: pickedOriginal });
+    // Si hay encuesta abierta de audiencia, cerrarla al confirmar
+    try {
+      if (audienceDialog?.pollId) {
+        await axios.post(`/api/game/poll/${audienceDialog.pollId}/close`);
+        audienceDialog.pollId = '';
+      }
+    } catch {}
     
   if (data.correct) {
   // Asignar puntos según la escalera visible
@@ -849,15 +888,41 @@ async function fiftyFifty() {
   }
 }
 
-async function showVerse() {
+// Estado y flujo para "Pregunta al público"
+const audienceDialog = reactive({ show: false, pollId: '', url: '', qrSrc: '', isLocalhost: false });
+
+async function askAudience() {
   try {
+    if (!question.value) return;
     playLifeline();
-    const { data } = await axios.get(`/api/game/lifeline/verse/${question.value.id}`);
-    showDialog('hint', 'Pasaje Iluminador', data.verseHint || 'Sin pista disponible para esta pregunta.', null, 'Entendido');
-    used.verse = true;
+    const optionsCount = (question.value.options || []).length || 4;
+    const { data } = await axios.post('/api/game/poll/start', { questionId: question.value.id, optionsCount });
+    const pollId = data?.id || data?.pollId || '';
+    if (!pollId) throw new Error('No se pudo crear la encuesta');
+    audienceDialog.pollId = pollId;
+  const base = window.location.origin;
+    const path = `/vote/${pollId}`;
+    const url = `${base}${path}`;
+    audienceDialog.url = url;
+  audienceDialog.isLocalhost = /localhost|127\.0\.0\.1/.test(base);
+  const encoded = encodeURIComponent(url);
+  // Mayor tamaño, margen amplio y corrección de errores H para legibilidad
+  audienceDialog.qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=520x520&margin=24&ecc=H&data=${encoded}`;
+    audienceDialog.show = true;
+    used.audience = true;
   } catch (error) {
-    console.error('Error getting verse hint:', error);
-    showDialog('error', 'Error', 'No se pudo obtener la pista. Intenta de nuevo.', null, 'Aceptar');
+    console.error('Error starting audience poll:', error);
+    showDialog('error', 'Error', 'No se pudo iniciar la votación del público. Intenta de nuevo.', null, 'Aceptar');
+  }
+}
+
+function copyAudienceLink() {
+  try {
+    if (!audienceDialog.url) return;
+    navigator.clipboard.writeText(audienceDialog.url);
+    showDialog('info', 'Enlace copiado', 'El enlace de votación se copió al portapapeles.', null, 'Listo');
+  } catch (e) {
+    // Fallback: nada crítico si falla
   }
 }
 
@@ -1125,4 +1190,6 @@ function handleFirstInteraction() {
   50% { transform: scale(1.06); }
   100% { transform: scale(1); }
 }
+.qr-box { background: #fff; padding: 12px; border-radius: 12px; }
+.qr-img :deep(img) { image-rendering: pixelated; }
 </style>

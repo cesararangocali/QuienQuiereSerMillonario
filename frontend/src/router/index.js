@@ -5,6 +5,7 @@ import GameView from '../views/GameView.vue';
 import CatechesisView from '../views/CatechesisView.vue';
 import CompetitiveView from '../views/CompetitiveView.vue';
 import AdminView from '../views/AdminView.vue';
+import VoteView from '../views/VoteView.vue';
 import StatsView from '../views/StatsView.vue';
 
 const routes = [
@@ -14,6 +15,7 @@ const routes = [
   { path: '/competitivo', component: CompetitiveView },
   { path: '/admin', component: AdminView },
   { path: '/estadisticas', component: StatsView },
+  { path: '/vote/:pollId', component: VoteView },
 ];
 
 const router = createRouter({ history: createWebHistory(), routes });
