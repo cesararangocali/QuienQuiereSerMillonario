@@ -2,7 +2,7 @@
   <v-app>
     <LockModal />
 
-    <v-main class="pb-0">
+    <v-main>
       <router-view />
     </v-main>
 
@@ -27,9 +27,6 @@
               </v-btn>
               <v-btn variant="text" size="small" prepend-icon="mdi-help-circle" class="footer-link">
                 Ayuda
-              </v-btn>
-              <v-btn variant="text" size="small" prepend-icon="mdi-email" class="footer-link">
-                Contacto
               </v-btn>
             </div>
           </v-col>

@@ -277,6 +277,30 @@
       @close="onDialogClose"
     />
 
+    <!-- Pausa intermedia (después de 5 y 10) -->
+    <v-dialog v-model="midBreakDialog.show" max-width="520" persistent>
+      <v-card class="game-dialog qqss-ring text-center" elevation="20">
+        <div class="game-dialog-header">
+          <v-icon icon="mdi-flag-checkered" color="light-blue" size="48" class="dialog-icon" />
+          <h2 class="dialog-title">{{ midBreakDialog.title }}</h2>
+        </div>
+        <v-card-text class="dialog-content">
+          <p class="dialog-message">{{ midBreakDialog.message }}</p>
+          <div class="text-left mt-4">
+            <div class="text-subtitle-2 mb-1">Reglas siguientes</div>
+            <ul class="text-body-2 pl-6">
+              <li>Niveles 1 a 5: sin límite de tiempo.</li>
+              <li>Niveles 6 a 10: 1 minuto por pregunta.</li>
+              <li>Niveles 11 a 15: 2 minutos por pregunta.</li>
+            </ul>
+          </div>
+        </v-card-text>
+        <v-card-actions class="justify-center pa-4">
+          <v-btn color="primary" size="large" variant="elevated" class="qqss-ring" prepend-icon="mdi-play" @click="startAfterBreak">Iniciar</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Diálogo: Pregunta al público (QR) -->
     <v-dialog v-model="audienceDialog.show" max-width="560" persistent>
       <v-card class="game-dialog qqss-ring text-center" elevation="20">
@@ -356,7 +380,7 @@
       v-model="showVictory"
       :title="victoryTitle"
       :message="victoryMessage"
-      :points="gameEndDialog.points"
+      :points="points"
       :confetti-delay-ms="victoryConfettiDelayMs"
       @play-again="playAgainSameUser"
       @change-user="playAgainNewUser"
@@ -427,6 +451,8 @@ const {
   enableAudioContext,
   audioContextReady,
   playIntro,
+  startIntroLoop,
+  stopIntroLoop,
   playCorrect,
   playWrong,
   playLifeline,
@@ -452,6 +478,8 @@ const started = ref(false);
 const difficulty = ref(1);
 const question = ref(null);
 const options = ref([]);
+// Volumen previo para restaurar después de silenciar al reiniciar
+const preMuteVolume = ref(1);
 
 // Control del ranking
 const showRanking = ref(false);
@@ -573,6 +601,9 @@ const victoryConfettiDelayMs = ref(220)
 let explanationResolver = null
 let explanationTimeout = null
 
+// Pausa intermedia (después de preguntas 5 y 10)
+const midBreakDialog = reactive({ show: false, title: '', message: '', nextDifficulty: 0 });
+
 // Función específica para mostrar explicaciones with espera
 async function showExplanationDialog(explanation, isCorrect) {
   const title = isCorrect ? '¡Respuesta Correcta!' : 'Respuesta Incorrecta';
@@ -639,13 +670,34 @@ function onDialogClose() {
   }
 }
 
+async function startAfterBreak() {
+  try {
+    midBreakDialog.show = false;
+    stopIntroLoop();
+    // Reanudar música de suspenso y cargar la siguiente pregunta según dificultad actual
+    await loadQuestion();
+    startSuspense();
+  } catch (e) {
+    console.error('Error starting after break:', e);
+    showDialog('error', 'Error', 'No se pudo continuar la partida.', null, 'Cerrar');
+  }
+}
+
 // Funciones para manejar el reinicio del juego
 function playAgainSameUser() {
+  // Silenciar y detener sonidos al reiniciar
+  preMuteVolume.value = masterVolume.value;
+  setMasterVolume(0);
+  stopAll();
   resetGame();
   // No iniciar automáticamente - dejar que el usuario decida cuándo comenzar
 }
 
 function playAgainNewUser() {
+  // Silenciar y detener sonidos al reiniciar
+  preMuteVolume.value = masterVolume.value;
+  setMasterVolume(0);
+  stopAll();
   resetGame();
   playerName.value = '';
   selectedPlayerInfo.value = null;
@@ -802,7 +854,7 @@ async function next() {
     } catch {}
     
   if (data.correct) {
-  // Asignar puntos según la escalera visible
+  // Asignar puntos según la puntuación visible
   const stepIndex = Math.max(0, Math.min(LADDER_VALUES.length - 1, difficulty.value - 1));
   points.value += LADDER_VALUES[stepIndex];
       animState.value = 'correct'; setTimeout(()=> animState.value = '', 800);
@@ -818,6 +870,21 @@ async function next() {
       }
       
       difficulty.value++;
+      // Si se acaba de superar 5 o 10, mostrar pausa con reglas y tiempos
+      if (difficulty.value === 6 || difficulty.value === 11) {
+        const fase = difficulty.value === 6 ? '¡Bien! Alcanzaste el nivel 5' : '¡Fantástico! Alcanzaste el nivel 10';
+        const tiempo = difficulty.value === 6 ? 'A partir de ahora tendrás 1 minuto por pregunta.' : 'Desde ahora tendrás 2 minutos por pregunta.';
+        midBreakDialog.title = 'Pausa del juego';
+        midBreakDialog.message = `${fase}. ${tiempo} Repasemos brevemente las reglas y continúa cuando estés listo.`;
+        midBreakDialog.nextDifficulty = difficulty.value;
+        // Pausar audio y temporizador
+        timerPaused.value = true;
+        if (timerRef.value) timerRef.value.pause();
+        stopSuspense();
+        startIntroLoop();
+        midBreakDialog.show = true;
+        return;
+      }
       if (difficulty.value > 15) {
         stopSuspense();
         playVictory();
@@ -1002,6 +1069,8 @@ async function startAfterWelcome() {
           setTimeout(async () => {
             welcomeDialog.ticking = false;
             welcomeDialog.show = false;
+            // Restaurar volumen previo al empezar nuevamente
+            setMasterVolume(preMuteVolume.value || 1);
             // Aplicar dificultad inicial elegida en filtros
             difficulty.value = Number(prefStartDifficulty?.value || 1);
             started.value = true;

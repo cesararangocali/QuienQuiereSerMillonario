@@ -1,8 +1,5 @@
 /* Estilos para GameView compacto */
-.game-stage {
-  max-height: 100vh;
-  overflow-y: auto;
-}
+.game-stage { max-height: calc(100dvh - 220px); overflow-y: auto; }
 
 .game-lifelines {
   margin: 12px 0;
@@ -46,15 +43,23 @@
     radial-gradient(circle at 80% 80%, rgba(240,196,25,0.1) 0%, transparent 50%),
     radial-gradient(100% 80% at 50% 0%, rgba(255,255,255,0.12), rgba(255,255,255,0) 70%),
     linear-gradient(135deg, rgba(11,27,63,0.3) 0%, rgba(30,60,120,0.2) 50%, rgba(11,27,63,0.3) 100%);
-  padding: 60px 16px;
+  padding: 32px 16px;
   position: relative;
   z-index: 1;
   overflow: hidden;
-  min-height: 60vh;
+  min-height: 44vh;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
+}
+
+/* Ajustes responsivos para asegurar visibilidad del footer en pantallas bajas */
+@media (max-height: 900px) {
+  .qqss-hero { min-height: 42vh; padding: 32px 12px; }
+}
+@media (max-height: 750px) {
+  .qqss-hero { min-height: 36vh; padding: 24px 10px; }
 }
 
 .qqss-hero::before {
@@ -188,7 +193,8 @@ body::before {
   background: 
     radial-gradient(circle at 50% 20%, rgba(240,196,25,0.15) 0%, transparent 60%),
     radial-gradient(100% 80% at 50% 0%, rgba(255,255,255,0.08), rgba(255,255,255,0) 60%);
-  padding: 48px 16px;
+  padding: 32px 16px;
+  min-height: 44vh;
   position: relative;
   z-index: 1;
 }
@@ -220,7 +226,7 @@ body::before {
 
 .info-card {
   background: rgba(0,0,0,.35);
-  padding: 24px;
+  padding: 20px;
   min-height: 120px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
@@ -228,6 +234,9 @@ body::before {
   animation: float 8s ease-in-out infinite;
   animation-delay: var(--animation-delay, 0s);
 }
+
+.info-card.compact { padding: 16px; }
+.info-card.compact .info-title { margin-bottom: 6px; }
 
 .info-card:hover {
   transform: translateY(-8px) scale(1.02);

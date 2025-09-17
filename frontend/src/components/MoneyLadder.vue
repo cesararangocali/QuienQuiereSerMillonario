@@ -1,83 +1,58 @@
 <template>
   <v-card class="pa-2 qqss-ring ladder-card" elevation="6">
-    <v-card-title class="text-subtitle-1 py-1">Escalera</v-card-title>
-    <div class="ladder-scroll" ref="scrollEl">
-      <div class="ladder-fader top" aria-hidden="true" />
-      <div class="ladder-fader bottom" aria-hidden="true" />
-      <v-list density="compact" class="ladder-list">
-        <transition-group name="ladder" tag="div">
-          <v-list-item
-            v-for="(step, idx) in steps"
-            :key="idx"
-            class="ladder-item"
+    <v-card-title class="text-subtitle-1 py-1">Puntuación</v-card-title>
+    <v-list density="compact" class="ladder-list">
+      <transition-group name="ladder" tag="div">
+        <v-list-item
+          v-for="(value, i) in visibleValues"
+          :key="baseIndex + i"
+          class="ladder-item"
+        >
+          <div
+            class="ladder-row"
+            :class="{ active: (baseIndex + i + 1) === current, safe: safeSteps.includes(baseIndex + i + 1) }"
           >
-            <div
-              class="ladder-row"
-              :class="{ active: idx + 1 === current, safe: safeSteps.includes(idx + 1) }"
-              :ref="el => setItemRef(idx, el)"
-            >
-              <div class="left-accent" :class="{ show: idx + 1 === current }" />
-              <div class="spark-layer" v-if="idx + 1 === current">
-                <span class="spark s1" /><span class="spark s2" /><span class="spark s3" />
-                <span class="spark s4" /><span class="spark s5" />
-              </div>
-              <v-list-item-title class="ladder-title" :class="{ 'text-yellow-accent-3': idx + 1 === current }">
-                <span class="step-index">{{ (idx+1).toString().padStart(2,'0') }}</span>
-                <span class="step-sep">—</span>
-                <span class="step-value">
-                  <v-icon v-if="safeSteps.includes(idx + 1)" size="14" class="mr-1" color="cyan">mdi-shield-check</v-icon>
-                  {{ formatPoints(step) }}
-                </span>
-              </v-list-item-title>
-              <div class="shine" v-if="idx + 1 === current" />
+            <div class="left-accent" :class="{ show: (baseIndex + i + 1) === current }" />
+            <div class="spark-layer" v-if="(baseIndex + i + 1) === current">
+              <span class="spark s1" /><span class="spark s2" /><span class="spark s3" />
+              <span class="spark s4" /><span class="spark s5" />
             </div>
-          </v-list-item>
-        </transition-group>
-      </v-list>
-    </div>
+            <v-list-item-title class="ladder-title" :class="{ 'text-yellow-accent-3': (baseIndex + i + 1) === current }">
+              <span class="step-index">{{ (baseIndex + i + 1).toString().padStart(2,'0') }}</span>
+              <span class="step-sep">—</span>
+              <span class="step-value">
+                <v-icon v-if="safeSteps.includes(baseIndex + i + 1)" size="14" class="mr-1" color="cyan">mdi-shield-check</v-icon>
+                {{ formatPoints(value) }}
+              </span>
+            </v-list-item-title>
+            <div class="shine" v-if="(baseIndex + i + 1) === current" />
+          </div>
+        </v-list-item>
+      </transition-group>
+    </v-list>
   </v-card>
-</template>
+ </template>
 <script setup>
-import { ref, watch, nextTick, onMounted } from 'vue';
+import { computed } from 'vue';
 import { LADDER_VALUES, formatPoints } from '../constants/ladder.js';
 const props = defineProps({ current: { type: Number, default: 1 } });
 const steps = LADDER_VALUES;
 const safeSteps = [5, 10, 15];
 
-const scrollEl = ref(null);
-const itemRefs = ref({});
-function setItemRef(idx, el) { if (el) itemRefs.value[idx] = el; }
-
-function scrollActiveIntoView() {
-  const activeIdx = (props.current || 1) - 1;
-  const container = scrollEl.value;
-  const el = itemRefs.value[activeIdx];
-  if (!container || !el) return;
-  const cTop = container.scrollTop;
-  const cBottom = cTop + container.clientHeight;
-  const eTop = el.offsetTop - 4;
-  const eBottom = eTop + el.offsetHeight + 4;
-  if (eTop < cTop) {
-    container.scrollTo({ top: eTop - 8, behavior: 'smooth' });
-  } else if (eBottom > cBottom) {
-    container.scrollTo({ top: eBottom - container.clientHeight + 8, behavior: 'smooth' });
-  }
-}
-
-onMounted(() => nextTick(scrollActiveIntoView));
-watch(() => props.current, async () => { await nextTick(); scrollActiveIntoView(); });
+// Ventana de 7 elementos con el actual centrado (posición 4) cuando sea posible
+const baseIndex = computed(() => {
+  const currIdx = Math.max(0, Math.min(steps.length - 1, (props.current || 1) - 1));
+  let start = currIdx - 3; // centrar actual en índice 3 de la ventana
+  if (start < 0) start = 0;
+  if (start + 7 > steps.length) start = Math.max(0, steps.length - 7);
+  return start;
+});
+const visibleValues = computed(() => steps.slice(baseIndex.value, Math.min(steps.length, baseIndex.value + 7)));
 </script>
 
 <style scoped>
-.ladder-card {
-  max-width: 280px;
-  width: 100%;
-}
-.ladder-scroll { position: relative; max-height: 320px; overflow: auto; }
+.ladder-card { max-width: 280px; width: 100%; }
 .ladder-list { padding-top: 2px; position: relative; }
-.ladder-fader { position: sticky; height: 14px; z-index: 2; pointer-events: none; }
-.ladder-fader.top { top: 0; background: linear-gradient(to bottom, rgba(0,0,0,0.24), rgba(0,0,0,0)); }
-.ladder-fader.bottom { bottom: 0; background: linear-gradient(to top, rgba(0,0,0,0.24), rgba(0,0,0,0)); }
 .ladder-item { min-height: 22px; padding-top: 0; padding-bottom: 0; }
 .ladder-row {
   position: relative;

@@ -172,17 +172,17 @@ export function useGameSounds() {
     })
   }
 
-  const play = async (name, { fadePrevious = true } = {}) => {
+  const play = async (name, { fadePrevious = true, loop = false } = {}) => {
     ensureLoaded()
     if (!enabled.value) {
       await enable().catch(() => {})
     }
     if (fadePrevious) stopAll()
-    if (audioCtx.value && buffers.value[name]) {
-      const src = audioCtx.value.createBufferSource()
+  if (audioCtx.value && buffers.value[name]) {
+  const src = audioCtx.value.createBufferSource()
       src.buffer = buffers.value[name]
-      const loop = name === 'suspense_loop'
-      src.loop = loop
+  const isLoop = (loop === true) || (name === 'suspense_loop')
+  src.loop = isLoop
       const gain = audioCtx.value.createGain()
       const category = categories[name] || 'fx'
       const bus = category === 'music' ? musicGain.value : fxGain.value
@@ -196,7 +196,7 @@ export function useGameSounds() {
       src.connect(gain)
       gain.connect(bus)
       try { src.start(0) } catch {}
-      playing.value[name] = { source: src, gain, category, loop }
+  playing.value[name] = { source: src, gain, category, loop: isLoop }
       if (category === 'fx' && musicGain.value && audioCtx.value) {
         const now = Date.now()
         const durMs = Math.ceil((src.buffer?.duration ?? 0.4) * 1000) + 120
@@ -220,7 +220,7 @@ export function useGameSounds() {
           }
         }, durMs)
       }
-      if (!loop) src.onended = () => {
+      if (!isLoop) src.onended = () => {
         if (playing.value[name]?.source === src) delete playing.value[name]
         try { src.disconnect(); gain.disconnect() } catch {}
       }
@@ -228,6 +228,8 @@ export function useGameSounds() {
     }
     const a = sounds.value[name]
     if (!a) return
+    // Ajustar loop en fallback
+    a.loop = (loop === true) || (name === 'suspense_loop')
     try { a.currentTime = 0; await a.play() } catch {}
   }
 
@@ -236,6 +238,8 @@ export function useGameSounds() {
   const audioContextReady = enabled
 
   const playIntro = () => play('intro')
+  const startIntroLoop = () => play('intro', { fadePrevious: true, loop: true })
+  const stopIntroLoop = () => fadeOut('intro', 600)
   const playCorrect = () => play('correct')
   const playWrong = () => play('wrong')
   const playLifeline = () => play('lifeline', { fadePrevious: false })
@@ -294,6 +298,8 @@ export function useGameSounds() {
     setMasterVolume,
   beep,
     playIntro,
+  startIntroLoop,
+  stopIntroLoop,
     playCorrect,
     playWrong,
     playLifeline,
